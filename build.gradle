@@ -1,0 +1,82 @@
+/*
+ * gradle settings
+ *
+ */
+
+plugins {
+    id 'java'
+    id 'jacoco'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'info.picocli:picocli:4.6.3'
+    implementation 'mysql:mysql-connector-java:8.0.29'
+    implementation 'com.github.spotbugs:spotbugs-annotations:4.6.0'
+    testImplementation 'com.h2database:h2:2.1.212'
+    testImplementation 'org.assertj:assertj-core:3.22.0'
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.2'
+    testImplementation 'org.junit.jupiter:junit-jupiter-engine:5.8.2'
+    testImplementation 'org.mockito:mockito-inline:4.5.1'
+    testImplementation 'org.awaitility:awaitility:4.2.0'
+    testImplementation 'com.github.stefanbirkner:system-lambda:1.2.1'
+}
+
+group = 'com.henrya.tools'
+version = '1.0.0'
+description = 'htcleaner - a tool to clean large tables in the database'
+java.sourceCompatibility = JavaVersion.VERSION_1_8
+
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+}
+
+test {
+    testLogging {
+        events "PASSED", "SKIPPED", "FAILED", "STANDARD_OUT", "STANDARD_ERROR"
+    }
+    useJUnitPlatform()
+    finalizedBy jacocoTestReport // report is always generated after tests run
+}
+
+jacocoTestReport {
+    dependsOn test // tests are required to run before generating the report
+    reports {
+        xml.required = false
+        csv.required = false
+        // require only html report
+        html.outputLocation = layout.buildDirectory.dir('jacocoHtml')
+    }
+    afterEvaluate {
+        classDirectories.setFrom(files(classDirectories.files.collect {
+            fileTree(dir: it, exclude: [
+                    "**/config/*"
+            ])
+        }))
+    }
+}
+
+jacoco {
+    toolVersion = "0.8.7"
+}
+
+jar {
+    manifest {
+        attributes "Main-Class": "com.henrya.tools.htcleaner.Application"
+    }
+
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+}
+
+task jarWithDepenencies(type: Jar) {
+    manifest {
+        attributes "Main-Class": "com.henrya.tools.htcleaner.Application"
+    }
+    from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } }
+    with jar
+}
