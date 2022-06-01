@@ -1,5 +1,6 @@
 package com.henrya.tools.htcleaner;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.*;
 import picocli.CommandLine;
@@ -10,7 +11,39 @@ import static com.github.stefanbirkner.systemlambda.SystemLambda.tapSystemOutNor
 
 class CleanerTest {
 
+
   @Test
+  @DisplayName("Test getters and setters")
+  void getterSetterTest() {
+    Cleaner cleaner = new Cleaner();
+    cleaner.setQuiet(true);
+    cleaner.setCountRows(true);
+    cleaner.setDatabase("h2");
+    cleaner.setDriver("mysql");
+    cleaner.setHost("localhost");
+    cleaner.setLimit(1000);
+    cleaner.setPassword("abc");
+    cleaner.setPort(3306);
+    cleaner.setDryRun(false);
+    cleaner.setPrimaryKey("ID");
+    cleaner.setWhere("WHERE");
+    cleaner.setProgressDelay(100);
+    assertThat(cleaner.isNotQuiet()).isFalse();
+    assertThat(cleaner.isCountRows()).isTrue();
+    assertThat(cleaner.getDatabase()).isEqualTo("h2");
+    assertThat(cleaner.getDriver()).isEqualTo("mysql");
+    assertThat(cleaner.getHost()).isEqualTo("localhost");
+    assertThat(cleaner.getLimit()).isEqualTo(1000);
+    assertThat(cleaner.getPassword()).isEqualTo("abc");
+    assertThat(cleaner.getPort()).isEqualTo(3306);
+    assertThat(cleaner.isDryRun()).isTrue();
+    assertThat(cleaner.getPrimaryKey()).isEqualTo("ID");
+    assertThat(cleaner.getWhere()).isEqualTo("WHERE");
+    assertThat(cleaner.getProgressDelay()).isEqualTo(100);
+  }
+
+  @Test
+  @DisplayName("Test required parameters missing exception")
   void requiredParameterMissingTest() throws Exception{
     String systemError = tapSystemErr(() -> {
       String output = tapSystemOutNormalized(() -> new CommandLine(new Cleaner()).execute());
@@ -47,8 +80,8 @@ class CleanerTest {
   }
 
   @Test
+  @DisplayName("Test required parameters valid")
   void requiredParameterValidTest() throws Exception{
-
     String systemError = tapSystemErr(() -> {
       String outText = tapSystemOutNormalized(() -> {
         Cleaner cleaner = Mockito.spy(Cleaner.class);
@@ -58,6 +91,5 @@ class CleanerTest {
       assertThat(outText).isEmpty();
     });
     assertThat(systemError).isEmpty();
-
   }
 }

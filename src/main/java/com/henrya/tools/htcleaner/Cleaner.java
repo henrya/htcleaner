@@ -135,134 +135,298 @@ public class Cleaner implements Runnable {
       ParameterConstants.PARAMETER_DRIVER_LONG}, defaultValue = DefaultsConstants.DEFAULT_DRIVER, description = "JDBC Database driver")
   String driver;
 
+  /**
+   * Command line runner main method
+   *
+   * @param args arguments
+   */
   public static void main(String... args) {
     new CommandLine(new Cleaner()).execute(args);
   }
 
+  /**
+   * Get spec
+   *
+   * @return CommandSpec spec
+   */
   public CommandSpec getSpec() {
     return spec;
   }
 
+  /**
+   * Set CommandSpec
+   *
+   * @param spec CommandSpec
+   */
   public void setSpec(CommandSpec spec) {
     this.spec = spec;
   }
 
+  /**
+   * Get host name
+   *
+   * @return String host name
+   */
   public String getHost() {
     return host;
   }
 
+  /**
+   * Set host name
+   *
+   * @param host host name
+   */
   public void setHost(String host) {
     this.host = host;
   }
 
+  /**
+   * Get user name
+   *
+   * @return String user name
+   */
   public String getUser() {
     return user;
   }
 
+  /**
+   * Set user name
+   *
+   * @param user user name
+   */
   public void setUser(String user) {
     this.user = user;
   }
 
+  /**
+   * Get password
+   *
+   * @return String password
+   */
   public String getPassword() {
     return password;
   }
 
+  /**
+   * Set password
+   *
+   * @param password Password
+   */
   public void setPassword(String password) {
     this.password = password;
   }
 
+  /**
+   * Get port number
+   *
+   * @return Integer port number
+   */
   public Integer getPort() {
     return port;
   }
 
+  /**
+   * Set port number
+   *
+   * @param port port number
+   */
   public void setPort(Integer port) {
     this.port = port;
   }
 
+  /**
+   * Get database name
+   *
+   * @return String database name
+   */
   public String getDatabase() {
     return database;
   }
 
+  /**
+   * Set database name
+   *
+   * @param database database name
+   */
   public void setDatabase(String database) {
     this.database = database;
   }
 
+  /**
+   * Get table name
+   *
+   * @return String table name
+   */
   public String getTable() {
     return table;
   }
 
+  /**
+   * Set table name
+   *
+   * @param table Table name
+   */
   public void setTable(String table) {
     this.table = table;
   }
 
+  /**
+   * Get where statement
+   *
+   * @return String where
+   */
   public String getWhere() {
     return where;
   }
 
+  /**
+   * Set where statement
+   *
+   * @param where Where statement
+   */
   public void setWhere(String where) {
     this.where = where;
   }
 
+  /**
+   * Get chunk / limit size
+   *
+   * @return Integer limit
+   */
   public Integer getLimit() {
     return limit;
   }
 
+  /**
+   * Set chunk / limit size
+   *
+   * @param limit limit size
+   */
   public void setLimit(Integer limit) {
     this.limit = limit;
   }
 
+  /**
+   * Get sleep duration
+   *
+   * @return Integer sleep duration
+   */
   public Integer getSleep() {
     return sleep;
   }
 
+  /**
+   * Set sleep duration
+   *
+   * @param sleep sleep duration
+   */
   public void setSleep(Integer sleep) {
     this.sleep = sleep;
   }
 
+  /**
+   * Get is dry run mode on or off
+   *
+   * @return boolean Dry run mode
+   */
   public boolean isDryRun() {
     return !dryRun;
   }
 
+  /**
+   * Set dry run mode
+   *
+   * @param dryRun dry run mode
+   */
   public void setDryRun(boolean dryRun) {
     this.dryRun = dryRun;
   }
 
+  /**
+   * Get whether to count rows before the execution or not
+   *
+   * @return boolean count rows
+   */
   public boolean isCountRows() {
     return countRows;
   }
 
+  /**
+   * Set whether to count rows before the execution or not
+   *
+   * @param countRows count rows
+   */
   public void setCountRows(boolean countRows) {
     this.countRows = countRows;
   }
 
+  /**
+   * Get whether quiet mode is off or not
+   *
+   * @return boolean quiet mode
+   */
   public boolean isNotQuiet() {
     return !quiet;
   }
 
+  /**
+   * Set whether quiet mode is off or not
+   *
+   * @param quiet quiet mode
+   */
   public void setQuiet(boolean quiet) {
     this.quiet = quiet;
   }
 
+  /**
+   * Get progress delay
+   *
+   * @return Integer progress delay
+   */
   public Integer getProgressDelay() {
     return progressDelay;
   }
 
+  /**
+   * Set progress delay
+   *
+   * @param progressDelay progress delay
+   */
   public void setProgressDelay(Integer progressDelay) {
     this.progressDelay = progressDelay;
   }
 
+  /**
+   * Get primary key
+   *
+   * @return String Primary keu
+   */
   public String getPrimaryKey() {
     return primaryKey;
   }
 
+  /**
+   * Set primary key
+   * @param primaryKey primary key
+   */
   public void setPrimaryKey(String primaryKey) {
     this.primaryKey = primaryKey;
   }
 
+  /**
+   * Return driver name
+   *
+   * @return String driver
+   */
   public String getDriver() {
     return driver;
   }
 
+  /**
+   * Set Driver
+   *
+   * @param driver driver name
+   */
   public void setDriver(String driver) {
     this.driver = driver;
   }
