@@ -220,7 +220,7 @@ public class Cleaner implements Runnable {
   }
 
   public boolean isDryRun() {
-    return dryRun;
+    return !dryRun;
   }
 
   public void setDryRun(boolean dryRun) {
