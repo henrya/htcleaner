@@ -62,6 +62,17 @@ class ValidatorImplTest {
   }
 
   @Test
+  @DisplayName("Test progress delay argument error")
+  void testProgressDelayArgumentError() throws ParameterException {
+    Cleaner cleaner = TestConfig.getCleaner();
+    cleaner.setProgressDelay(-1);
+    CommandLine commandLine = new CommandLine(cleaner);
+    cleaner.setSpec(commandLine.getCommandSpec());
+    assertThatThrownBy(() -> ValidatorImpl.validate(cleaner)).isInstanceOf(ParameterException.class)
+        .hasMessageContaining("Invalid value '-1' for option '--progress-delay': ");
+  }
+
+  @Test
   @DisplayName("Test quiet mode")
   void testQuietMode() {
     Cleaner cleaner = TestConfig.getCleaner();

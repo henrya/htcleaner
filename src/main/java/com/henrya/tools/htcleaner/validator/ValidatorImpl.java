@@ -29,8 +29,8 @@ public class ValidatorImpl {
         ParameterConstants.PARAMETER_LIMIT_SHORT,
         ParameterConstants.PARAMETER_LIMIT_LONG,
         ParameterConstants.PARAMETER_SLEEP_LONG,
-        ParameterConstants.PARAMETER_SLEEP_LONG,
-        ParameterConstants.PARAMETER_SLEEP_LONG
+        ParameterConstants.PARAMETER_SLEEP_SHORT,
+        ParameterConstants.PARAMETER_PROGRESS_DELAY_LONG
     );
 
     MASK_VALUE = Arrays.asList(
