@@ -62,7 +62,7 @@ class CleanerDriverImplTest {
       assertThatThrownBy(() -> cleanerDriver.connect(cleaner.getHost(), cleaner.getPort(), cleaner.getDatabase(),
           cleaner.getUser(), "abc")).isInstanceOf(
               DataException.class)
-          .hasMessageContaining("Failed to connect: Wrong user name or password [28000-214]");
+          .hasMessageContaining("Failed to connect: Wrong user name or password [28000-224]");
 
     assertThat(cleanerDriver).isNotNull();
   }
