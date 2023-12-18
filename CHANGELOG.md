@@ -1,6 +1,6 @@
 # Changelog
-**2023-12-18**
-1.0.1 -  Various dependency upgrades
+**2023-12-19**
+1.0.2 -  Various dependency upgrades
 
 
 **2022-11-05**
