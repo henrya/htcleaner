@@ -96,18 +96,18 @@ However, *htcleaner* does not check for any indexes and it is highly recommended
 
 Execution without optional parameters. Defaults will be used instead.
 ~~~
-java -jar htcleaner-mysql-1.0.1.jar --host=localhost --user=username --password=pass --port=3306 --database=my_schema --table=my_table
+java -jar htcleaner-mysql-1.0.2.jar --host=localhost --user=username --password=pass --port=3306 --database=my_schema --table=my_table
 ~~~
 
 Execution with additional parameters and optional `WHERE` statement
 
 ~~~
-java -jar htcleaner-mysql-1.0.1.jar --host=localhost --user=username --password=pass --port=3306 --database=my_schema --table=my_table --limit=1000 --sleep=10000 --WHERE="AND user_id > 100"
+java -jar htcleaner-mysql-1.0.2.jar --host=localhost --user=username --password=pass --port=3306 --database=my_schema --table=my_table --limit=1000 --sleep=10000 --WHERE="AND user_id > 100"
 ~~~
 
 Execution without any parameters will display all the parameters, including shorthands
 ~~~
-java -jar htcleaner-mysql-1.0.1.jar
+java -jar htcleaner-mysql-1.0.2.jar
 ~~~
 
 # Requirements
