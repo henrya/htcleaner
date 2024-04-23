@@ -1,7 +1,9 @@
 # Changelog
+**2024-04-23**
+1.0.3 -  Various dependency upgrades and JDK 21 support
+
 **2023-12-19**
 1.0.2 -  Various dependency upgrades
-
 
 **2022-11-05**
 1.0.1 -  Various dependency upgrades
