@@ -27,7 +27,6 @@ class ProcessorImplTest {
     CleanerDriverImpl cleanerDriver = Mockito.mock(CleanerDriverImpl.class);
     Connection connection = Mockito.mock(Connection.class);
 
-    //cleanerDriver.setConn("abc");
     Mockito.doNothing().when(cleanerDriver).connect(Mockito.anyString(),Mockito.anyInt(),Mockito.anyString(),Mockito.anyString(),Mockito.anyString());
     Mockito.when(cleanerDriver.getConn()).thenReturn(connection);
 
@@ -295,7 +294,6 @@ class ProcessorImplTest {
     CleanerDriverImpl cleanerDriver = Mockito.mock(CleanerDriverImpl.class);
     Connection connection = Mockito.mock(Connection.class);
 
-    //cleanerDriver.setConn("abc");
     Mockito.doNothing().when(cleanerDriver).connect(Mockito.anyString(),Mockito.anyInt(),Mockito.anyString(),Mockito.anyString(),Mockito.anyString());
     Mockito.when(cleanerDriver.getConn()).thenReturn(connection);
 
@@ -347,7 +345,6 @@ class ProcessorImplTest {
     CleanerDriverImpl cleanerDriver = Mockito.mock(CleanerDriverImpl.class);
     Connection connection = Mockito.mock(Connection.class);
 
-    //cleanerDriver.setConn("abc");
     Mockito.doNothing().when(cleanerDriver).connect(Mockito.anyString(),Mockito.anyInt(),Mockito.anyString(),Mockito.anyString(),Mockito.anyString());
     Mockito.when(cleanerDriver.getConn()).thenReturn(connection);
 
@@ -452,7 +449,6 @@ class ProcessorImplTest {
     CleanerDriverImpl cleanerDriver = Mockito.mock(CleanerDriverImpl.class);
     Connection connection = Mockito.mock(Connection.class);
 
-    //cleanerDriver.setConn("abc");
     Mockito.doNothing().when(cleanerDriver).connect(Mockito.anyString(),Mockito.anyInt(),Mockito.anyString(),Mockito.anyString(),Mockito.anyString());
     Mockito.when(cleanerDriver.getConn()).thenReturn(connection);
 

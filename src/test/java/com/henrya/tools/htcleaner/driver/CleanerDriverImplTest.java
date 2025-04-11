@@ -40,7 +40,6 @@ class CleanerDriverImplTest {
   @Test
   @DisplayName("Connection test")
   void testConnection(){
-    CleanerDriverImpl cleanerDriver = new CleanerDriverImpl("h2");
     Cleaner cleaner = TestConfig.getCleaner();
     try {
       cleanerDriver.connect(cleaner.getHost(), cleaner.getPort(), cleaner.getDatabase(),
@@ -56,13 +55,12 @@ class CleanerDriverImplTest {
   @Test
   @DisplayName("Connection test failure")
   void testConnectionFailure(){
-    CleanerDriverImpl cleanerDriver = new CleanerDriverImpl("h2");
     Cleaner cleaner = TestConfig.getCleaner();
 
       assertThatThrownBy(() -> cleanerDriver.connect(cleaner.getHost(), cleaner.getPort(), cleaner.getDatabase(),
           cleaner.getUser(), "abc")).isInstanceOf(
               DataException.class)
-          .hasMessageContaining("Failed to connect: Wrong user name or password [28000-224]");
+          .hasMessageContaining("Failed to connect: Wrong user name or password [28000-232]");
 
     assertThat(cleanerDriver).isNotNull();
   }
@@ -70,30 +68,30 @@ class CleanerDriverImplTest {
   @Test
   @DisplayName("Connection test failure, mysql driver")
   void testConnectionFailureMysqlDriver(){
-    CleanerDriverImpl cleanerDriver = new CleanerDriverImpl("mysql");
+    CleanerDriverImpl mySqlCleanerDriver = new CleanerDriverImpl("mysql");
     Cleaner cleaner = TestConfig.getCleaner();
 
-    assertThatThrownBy(() -> cleanerDriver.connect(cleaner.getHost(), cleaner.getPort(), cleaner.getDatabase(),
+    assertThatThrownBy(() -> mySqlCleanerDriver.connect(cleaner.getHost(), cleaner.getPort(), cleaner.getDatabase(),
         cleaner.getUser(), "abc")).isInstanceOf(
             DataException.class)
         .hasMessageContaining( "Failed to connect: Communications link failure\n" + "\n"
             + "The last packet sent successfully to the server was 0 milliseconds ago. The driver has not received any packets from the server.");
 
-    assertThat(cleanerDriver).isNotNull();
+    assertThat(mySqlCleanerDriver).isNotNull();
   }
 
   @Test
   @DisplayName("Connection test failure, unknown driver")
   void testConnectionFailureRandomDriver(){
-    CleanerDriverImpl cleanerDriver = new CleanerDriverImpl("random");
+    CleanerDriverImpl randomCleanerDriver = new CleanerDriverImpl("random");
     Cleaner cleaner = TestConfig.getCleaner();
 
-    assertThatThrownBy(() -> cleanerDriver.connect(cleaner.getHost(), cleaner.getPort(), cleaner.getDatabase(),
+    assertThatThrownBy(() -> randomCleanerDriver.connect(cleaner.getHost(), cleaner.getPort(), cleaner.getDatabase(),
         cleaner.getUser(), "abc")).isInstanceOf(
             DataException.class)
         .hasMessageContaining("Failed to connect: Unexpected driver: random");
 
-    assertThat(cleanerDriver).isNotNull();
+    assertThat(randomCleanerDriver).isNotNull();
   }
 
   @Test
@@ -216,7 +214,6 @@ class CleanerDriverImplTest {
   @Test
   @DisplayName("Delete records by primary key , exception on commit")
   void testDeleteRecordsByPrimaryKeyExceptionOnCommit() throws SQLException {
-    CleanerDriverImpl cleanerDriver = new CleanerDriverImpl("h2");
     Connection connection = Mockito.mock(Connection.class);
     cleanerDriver.setConn(connection);
     Mockito.doNothing().when(connection).setAutoCommit(Mockito.anyBoolean());
@@ -250,7 +247,6 @@ class CleanerDriverImplTest {
   @Test
   @DisplayName("Get table meta data , exception")
   void testGetTableSchemaMockException() throws SQLException{
-    CleanerDriverImpl cleanerDriver = new CleanerDriverImpl("h2");
     Connection connection = Mockito.mock(Connection.class);
     cleanerDriver.setConn(connection);
     Mockito.when(connection.getMetaData()).thenThrow(SQLException.class);

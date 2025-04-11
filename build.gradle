@@ -8,6 +8,12 @@ plugins {
     id 'jacoco'
 }
 
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(11)
+    }
+}
+
 repositories {
     mavenCentral()
 }
@@ -17,25 +23,26 @@ configurations {
 }
 
 dependencies {
-    implementation 'info.picocli:picocli:4.7.5'
-    implementation 'com.mysql:mysql-connector-j:8.3.0'
-    implementation 'com.github.spotbugs:spotbugs-annotations:4.8.4'
-    testImplementation 'com.h2database:h2:2.2.224'
-    testImplementation 'org.assertj:assertj-core:3.25.3'
-    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.10.2'
-    testImplementation 'org.junit.jupiter:junit-jupiter-engine:5.10.2'
-    testImplementation 'org.mockito:mockito-core:5.11.0'
-    testImplementation 'org.awaitility:awaitility:4.2.1'
+    implementation 'info.picocli:picocli:4.7.6'
+    implementation 'com.mysql:mysql-connector-j:9.2.0'
+    implementation 'com.github.spotbugs:spotbugs-annotations:4.9.3'
+    testImplementation 'com.h2database:h2:2.3.232'
+    testImplementation 'org.assertj:assertj-core:3.27.3'
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.11.4'
+    testImplementation 'org.junit.jupiter:junit-jupiter-engine:5.11.4'
+    testImplementation 'org.mockito:mockito-core:5.17.0'
+    testImplementation 'org.awaitility:awaitility:4.3.0'
     testImplementation 'com.github.stefanbirkner:system-lambda:1.2.1'
-    byteBuddyAgent "net.bytebuddy:byte-buddy-agent:1.14.13"
+    byteBuddyAgent "net.bytebuddy:byte-buddy-agent:1.17.5"
 }
 
 group = 'com.henrya.tools'
-version = '1.0.3'
+version = '1.0.4'
 description = 'htcleaner - a tool to clean large tables in the database'
 java.sourceCompatibility = JavaVersion.VERSION_1_8
 
 tasks.withType(JavaCompile).configureEach {
+    options.release = 11
     options.encoding = 'UTF-8'
 }
 
@@ -66,7 +73,7 @@ jacocoTestReport {
 }
 
 jacoco {
-    toolVersion = "0.8.12"
+    toolVersion = "0.8.13"
 }
 
 jar {
