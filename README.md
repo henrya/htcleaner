@@ -146,5 +146,5 @@ mvn verify assembly:single
 * Gradle
 
 ~~~
-gradle build
+./gradlew build
 ~~~
