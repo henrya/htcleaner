@@ -129,7 +129,7 @@ java -jar htcleaner-mysql-1.0.5-jar-with-dependencies.jar
 
 # Requirements
 
-* JDK8 (JDK11+ recommended)
+* Requires JDK 8. Compatible with JDK 11+.
 
 # Supported JDBC drivers
 
