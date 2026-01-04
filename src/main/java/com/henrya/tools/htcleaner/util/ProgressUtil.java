@@ -13,7 +13,7 @@ public class ProgressUtil {
     /**
      * Currently processed rows
      */
-    private static final AtomicInteger processedRows = new AtomicInteger(0);
+    private final AtomicInteger processedRows = new AtomicInteger(0);
     /**
      * Total rows to be processed
      */
@@ -59,7 +59,7 @@ public class ProgressUtil {
      *
      * @param processedRows currently processed rows
      */
-    public static void setProcessedRows(int processedRows) {
-        ProgressUtil.processedRows.set(processedRows);
+    public void setProcessedRows(int processedRows) {
+        this.processedRows.set(processedRows);
     }
 }

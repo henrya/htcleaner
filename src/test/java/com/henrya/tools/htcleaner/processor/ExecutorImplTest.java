@@ -26,7 +26,7 @@ class ExecutorImplTest {
         Arrays.asList("1", "2")).thenReturn(new ArrayList<>());
     Mockito.when(cleanerDriver.deleteRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyBoolean())).thenReturn(2);
 
-    ExecutorImpl taskExecutor = new ExecutorImpl(cleaner, cleanerDriver);
+    ExecutorImpl taskExecutor = new ExecutorImpl(cleaner, cleanerDriver, null);
     int records = taskExecutor.runTask(new Timer());
     assertThat(records).isEqualTo(2);
   }
@@ -41,7 +41,7 @@ class ExecutorImplTest {
         Arrays.asList("1", "2")).thenReturn(new ArrayList<>());
     Mockito.when(cleanerDriver.deleteRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyBoolean())).thenReturn(2);
 
-    ExecutorImpl taskExecutor = new ExecutorImpl(cleaner, cleanerDriver);
+    ExecutorImpl taskExecutor = new ExecutorImpl(cleaner, cleanerDriver, null);
     int records = taskExecutor.runTask(null);
     assertThat(records).isEqualTo(2);
   }
@@ -57,7 +57,7 @@ class ExecutorImplTest {
         Arrays.asList("1", "2","3")).thenReturn(new ArrayList<>());
     Mockito.when(cleanerDriver.deleteRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyBoolean())).thenReturn(0);
 
-    ExecutorImpl taskExecutor = new ExecutorImpl(cleaner, cleanerDriver);
+    ExecutorImpl taskExecutor = new ExecutorImpl(cleaner, cleanerDriver, null);
     int records = taskExecutor.runTask(null);
     assertThat(records).isZero();
   }
@@ -72,7 +72,7 @@ class ExecutorImplTest {
         Arrays.asList("1", "2","3"));
     Mockito.when(cleanerDriver.deleteRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyBoolean())).thenThrow(new DataException("Error occurred"));
 
-    ExecutorImpl taskExecutor = new ExecutorImpl(cleaner, cleanerDriver);
+    ExecutorImpl taskExecutor = new ExecutorImpl(cleaner, cleanerDriver, null);
     int records = taskExecutor.runTask(null);
     assertThat(records).isZero();
   }
@@ -85,7 +85,7 @@ class ExecutorImplTest {
 
     Mockito.when(cleanerDriver.getRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyInt())).thenThrow(new RuntimeException("Error occurred"));
 
-    ExecutorImpl taskExecutor = new ExecutorImpl(cleaner, cleanerDriver);
+    ExecutorImpl taskExecutor = new ExecutorImpl(cleaner, cleanerDriver, null);
     int records = taskExecutor.runTask(null);
     assertThat(records).isZero();
   }

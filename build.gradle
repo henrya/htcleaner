@@ -26,6 +26,8 @@ dependencies {
     implementation 'info.picocli:picocli:4.7.7'
     implementation 'com.mysql:mysql-connector-j:9.5.0'
     implementation 'com.github.spotbugs:spotbugs-annotations:4.9.8'
+    runtimeOnly 'org.postgresql:postgresql:42.7.2'
+    runtimeOnly 'com.oracle.database.jdbc:ojdbc11:23.4.0.24.05'
     testImplementation 'com.h2database:h2:2.4.240'
     testImplementation 'org.assertj:assertj-core:3.27.3'
     testImplementation 'org.junit.jupiter:junit-jupiter:5.14.1'
@@ -38,7 +40,7 @@ dependencies {
 }
 
 group = 'com.henrya.tools'
-version = '1.0.5'
+version = '1.1.0'
 description = 'htcleaner - a tool to clean large tables in the database'
 java.sourceCompatibility = JavaVersion.VERSION_1_8
 
