@@ -6,18 +6,22 @@ import javax.annotation.Nonnull;
 
 public class DialectFactory {
 
-    public static DatabaseDialect createDialect(@Nonnull String driver) throws CleanerException {
-        switch (driver) {
-            case "mysql":
-                return new MySqlDialect();
-            case "h2":
-                return new H2Dialect();
-            case "oracle":
-                return new OracleDialect();
-            case "postgres":
-                return new PostgresDialect();
-            default:
-                throw new CleanerException("Unexpected driver: " + driver);
-        }
+  DialectFactory() {
+    throw new UnsupportedOperationException("This class cannot be initialized directly");
+  }
+
+  public static DatabaseDialect createDialect(@Nonnull String driver) throws CleanerException {
+    switch (driver) {
+      case "mysql":
+        return new MySqlDialect();
+      case "h2":
+        return new H2Dialect();
+      case "oracle":
+        return new OracleDialect();
+      case "postgres":
+        return new PostgresDialect();
+      default:
+        throw new CleanerException("Unexpected driver: " + driver);
     }
+  }
 }
