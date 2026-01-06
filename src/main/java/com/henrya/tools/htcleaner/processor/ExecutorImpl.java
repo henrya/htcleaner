@@ -32,14 +32,21 @@ public class ExecutorImpl {
     private final CleanerDriverImpl driver;
 
     /**
+     * Progress utility
+     */
+    private final ProgressUtil progressUtil;
+
+    /**
      * Constructor for ExecutorImpl
      *
-     * @param cleaner Cleaner
+     * @param cleaner       Cleaner
      * @param cleanerDriver CleanerDriverImpl
+     * @param progressUtil  ProgressUtil
      */
-    public ExecutorImpl(@Nonnull Cleaner cleaner, @Nonnull CleanerDriverImpl cleanerDriver) {
+    public ExecutorImpl(@Nonnull Cleaner cleaner, @Nonnull CleanerDriverImpl cleanerDriver, ProgressUtil progressUtil) {
         this.cleaner = cleaner;
         this.driver = cleanerDriver;
+        this.progressUtil = progressUtil;
     }
 
     /**
@@ -72,7 +79,9 @@ public class ExecutorImpl {
                         // reset amount of errors
                         errors.getAndSet(0);
                         // set progresss
-                        ProgressUtil.setProcessedRows(amount.get());
+                        if (progressUtil != null) {
+                            progressUtil.setProcessedRows(amount.get());
+                        }
                     } else {
                         // any other scenario is an error. skip
                         Logger.getGlobal().log(Level.SEVERE, "Update failed with an error!");
@@ -95,11 +104,11 @@ public class ExecutorImpl {
                     endTask(executorService, latch, timer);
                 }
                 errors.getAndIncrement();
-            } catch (Exception e){
-              Logger.getGlobal().severe(() ->
-                  String.format("Unexpected execution %s. Total rows removed %d", e.getMessage(), amount.get())
-              );
-              endTask(executorService, latch, timer);
+            } catch (Exception e) {
+                Logger.getGlobal().severe(() ->
+                        String.format("Unexpected execution %s. Total rows removed %d", e.getMessage(), amount.get())
+                );
+                endTask(executorService, latch, timer);
             }
         }, 0, cleaner.getSleep(), TimeUnit.MILLISECONDS);
 

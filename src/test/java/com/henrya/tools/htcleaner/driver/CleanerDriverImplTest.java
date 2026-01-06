@@ -1,6 +1,7 @@
 package com.henrya.tools.htcleaner.driver;
 
 import com.henrya.tools.htcleaner.Cleaner;
+import com.henrya.tools.htcleaner.exception.CleanerException;
 import com.henrya.tools.htcleaner.exception.DataException;
 import com.henrya.tools.htcleaner.tools.DataCreator;
 import com.henrya.tools.htcleaner.tools.TestConfig;
@@ -25,7 +26,7 @@ class CleanerDriverImplTest {
   private CleanerDriverImpl cleanerDriver;
 
   @BeforeEach
-  void init() throws Exception{
+  void init() throws Exception {
     cleanerDriver = new CleanerDriverImpl("h2");
     Cleaner cleaner = TestConfig.getCleaner();
     cleanerDriver.connect(cleaner.getHost(), cleaner.getPort(), cleaner.getDatabase(),
@@ -33,75 +34,86 @@ class CleanerDriverImplTest {
   }
 
   @AfterEach
-  void cleanTable() {
-    DataCreator.executeUpdate("DROP TABLE IF EXISTS "+TestConfig.TABLE_NAME);
+  void tearDown() {
+    DataCreator.executeUpdate("DROP TABLE IF EXISTS " + TestConfig.TABLE_NAME);
+    cleanerDriver.close();
   }
 
   @Test
   @DisplayName("Connection test")
-  void testConnection(){
-    Cleaner cleaner = TestConfig.getCleaner();
-    try {
-      cleanerDriver.connect(cleaner.getHost(), cleaner.getPort(), cleaner.getDatabase(),
-          cleaner.getUser(), cleaner.getPassword());
-      Connection connection = cleanerDriver.getConn();
-      assertThat(connection).isNotNull();
-    }catch (DataException e){
-      Assertions.fail();
-    }
+  void testConnection() {
+    Connection connection = cleanerDriver.getConn();
+    assertThat(connection).isNotNull();
     assertThat(cleanerDriver).isNotNull();
   }
 
   @Test
   @DisplayName("Connection test failure")
-  void testConnectionFailure(){
+  void testConnectionFailure() {
     Cleaner cleaner = TestConfig.getCleaner();
 
-      assertThatThrownBy(() -> cleanerDriver.connect(cleaner.getHost(), cleaner.getPort(), cleaner.getDatabase(),
-          cleaner.getUser(), "abc")).isInstanceOf(
-              DataException.class)
-          .hasMessageContaining("Failed to connect: Wrong user name or password [28000-240]");
+    assertThatThrownBy(() -> cleanerDriver.connect(cleaner.getHost(), cleaner.getPort(), cleaner.getDatabase(),
+        cleaner.getUser(), "abc")).isInstanceOf(
+            DataException.class)
+        .hasMessageContaining("Failed to connect: Wrong user name or password [28000-240]");
 
     assertThat(cleanerDriver).isNotNull();
   }
 
   @Test
   @DisplayName("Connection test failure, mysql driver")
-  void testConnectionFailureMysqlDriver(){
-    CleanerDriverImpl mySqlCleanerDriver = new CleanerDriverImpl("mysql");
+  void testConnectionFailureMysqlDriver() {
     Cleaner cleaner = TestConfig.getCleaner();
-
-    assertThatThrownBy(() -> mySqlCleanerDriver.connect(cleaner.getHost(), cleaner.getPort(), cleaner.getDatabase(),
-        cleaner.getUser(), "abc")).isInstanceOf(
-            DataException.class)
-        .hasMessageContaining( "Failed to connect: Communications link failure\n" + "\n"
-            + "The last packet sent successfully to the server was 0 milliseconds ago. The driver has not received any packets from the server.");
-
-    assertThat(mySqlCleanerDriver).isNotNull();
+    assertThatThrownBy(() -> {
+      CleanerDriverImpl mySqlCleanerDriver = new CleanerDriverImpl("mysql");
+      mySqlCleanerDriver.connect(cleaner.getHost(), cleaner.getPort(), cleaner.getDatabase(),
+          cleaner.getUser(), "abc");
+    }).isInstanceOf(DataException.class)
+        .hasMessageContaining("Failed to connect: Communications link failure");
   }
 
   @Test
-  @DisplayName("Connection test failure, unknown driver")
-  void testConnectionFailureRandomDriver(){
-    CleanerDriverImpl randomCleanerDriver = new CleanerDriverImpl("random");
+  @DisplayName("Connection test failure, oracle driver")
+  void testConnectionFailureOracleDriver() {
     Cleaner cleaner = TestConfig.getCleaner();
+    assertThatThrownBy(() -> {
+      CleanerDriverImpl oracleCleanerDriver = new CleanerDriverImpl("oracle");
+      oracleCleanerDriver.connect(cleaner.getHost(), cleaner.getPort(), cleaner.getDatabase(),
+          cleaner.getUser(), "abc");
+    }).isInstanceOf(DataException.class)
+        .hasMessageContaining("Failed to connect: ORA-12261: Cannot connect to database. Syntax error in Easy Connect connection string");
+  }
 
-    assertThatThrownBy(() -> randomCleanerDriver.connect(cleaner.getHost(), cleaner.getPort(), cleaner.getDatabase(),
-        cleaner.getUser(), "abc")).isInstanceOf(
-            DataException.class)
-        .hasMessageContaining("Failed to connect: Unexpected driver: random");
+  @Test
+  @DisplayName("Connection test failure, postgres driver")
+  void testConnectionFailurePostgresDriver() {
+    Cleaner cleaner = TestConfig.getCleaner();
+    assertThatThrownBy(() -> {
+      CleanerDriverImpl postgresCleanerDriver = new CleanerDriverImpl("postgres");
+      postgresCleanerDriver.connect(cleaner.getHost(), cleaner.getPort(), cleaner.getDatabase(),
+          cleaner.getUser(), "abc");
+    }).isInstanceOf(DataException.class)
+        .hasMessageContaining("Failed to connect: Connection to localhost:20 refused. Check that the hostname and port are correct and that the postmaster is accepting TCP/IP connections.");
+  }
 
-    assertThat(randomCleanerDriver).isNotNull();
+
+  @Test
+  @DisplayName("Connection test failure, unknown driver")
+  void testConnectionFailureRandomDriver() {
+    assertThatThrownBy(() -> {
+      new CleanerDriverImpl("random");
+    }).isInstanceOf(CleanerException.class)
+        .hasMessageContaining("Unexpected driver: random");
   }
 
   @Test
   @DisplayName("Get primary keys")
   void testGetPrimaryKeys() {
-    DataCreator.createData(TestConfig.TABLE_NAME,10);
+    DataCreator.createData(TestConfig.TABLE_NAME, 10);
     try {
       List<String> keys = cleanerDriver.getPrimaryKeys(TestConfig.TABLE_NAME);
       assertThat(keys).hasSize(1);
-    } catch (DataException e){
+    } catch (DataException e) {
       Assertions.fail();
     }
   }
@@ -110,10 +122,10 @@ class CleanerDriverImplTest {
   @DisplayName("Get primary keys, no primary keys")
   void testGetPrimaryKeysNoKeys() {
     try {
-      DataCreator.createDataWithoutPK(TestConfig.TABLE_NAME,10);
+      DataCreator.createDataWithoutPK(TestConfig.TABLE_NAME, 10);
       List<String> keys = cleanerDriver.getPrimaryKeys(TestConfig.TABLE_NAME);
       assertThat(keys).isEmpty();
-    } catch (DataException e){
+    } catch (DataException e) {
       Assertions.fail();
     }
   }
@@ -128,10 +140,10 @@ class CleanerDriverImplTest {
   @DisplayName("Get records by primary key")
   void testGetRecordsByPrimaryKey() {
     try {
-      DataCreator.createData(TestConfig.TABLE_NAME,10);
-      List<String> ids = cleanerDriver.getRecords(TestConfig.TABLE_NAME,"id", null, 10);
+      DataCreator.createData(TestConfig.TABLE_NAME, 10);
+      List<String> ids = cleanerDriver.getRecords(TestConfig.TABLE_NAME, "id", null, 10);
       assertThat(ids).hasSize(10);
-    } catch (DataException e){
+    } catch (DataException e) {
       Assertions.fail();
     }
   }
@@ -140,10 +152,10 @@ class CleanerDriverImplTest {
   @DisplayName("Get records by primary key and with where")
   void testGetRecordsByPrimaryKeyWithWhere() {
     try {
-      DataCreator.createData(TestConfig.TABLE_NAME,10);
-      List<String> ids = cleanerDriver.getRecords(TestConfig.TABLE_NAME,"id", "a LIKE 'a%'", 10);
+      DataCreator.createData(TestConfig.TABLE_NAME, 10);
+      List<String> ids = cleanerDriver.getRecords(TestConfig.TABLE_NAME, "id", "a LIKE 'a%'", 10);
       assertThat(ids).hasSize(10);
-    } catch (DataException e){
+    } catch (DataException e) {
       Assertions.fail();
     }
   }
@@ -151,21 +163,21 @@ class CleanerDriverImplTest {
   @Test
   @DisplayName("Get records by primary key , exception")
   void testGetRecordsByPrimaryKeyException() {
-    assertThatThrownBy(() -> cleanerDriver.getRecords(TestConfig.TABLE_NAME,"id", "a LIKE ''a%'", 1)).isInstanceOf(DataException.class);
+    assertThatThrownBy(() -> cleanerDriver.getRecords(TestConfig.TABLE_NAME, "id", "a LIKE ''a%'", 1)).isInstanceOf(DataException.class);
   }
 
   @Test
   @DisplayName("Get records by primary key")
   void tesDeleteRecordsByPrimaryKey() {
     try {
-      DataCreator.createData(TestConfig.TABLE_NAME,10);
+      DataCreator.createData(TestConfig.TABLE_NAME, 10);
       List<String> keys = new ArrayList<>();
-      for(int i=1;i<=10;i++){
+      for (int i = 1; i <= 10; i++) {
         keys.add(String.valueOf(i));
       }
-      int removed = cleanerDriver.deleteRecords(TestConfig.TABLE_NAME,"id", null, keys, true);
+      int removed = cleanerDriver.deleteRecords(TestConfig.TABLE_NAME, "id", null, keys, true);
       assertThat(removed).isEqualTo(10);
-    } catch (DataException e){
+    } catch (DataException e) {
       Assertions.fail();
     }
   }
@@ -174,14 +186,14 @@ class CleanerDriverImplTest {
   @DisplayName("Get records by primary key and with where")
   void tesDeleteRecordsByPrimaryKeyWithWhere() {
     try {
-      DataCreator.createData(TestConfig.TABLE_NAME,10);
+      DataCreator.createData(TestConfig.TABLE_NAME, 10);
       List<String> keys = new ArrayList<>();
-      for(int i=1;i<=10;i++){
+      for (int i = 1; i <= 10; i++) {
         keys.add(String.valueOf(i));
       }
-      int removed = cleanerDriver.deleteRecords(TestConfig.TABLE_NAME,"id", "a LIKE 'a%'", keys, true);
+      int removed = cleanerDriver.deleteRecords(TestConfig.TABLE_NAME, "id", "a LIKE 'a%'", keys, true);
       assertThat(removed).isEqualTo(10);
-    } catch (DataException e){
+    } catch (DataException e) {
       Assertions.fail();
     }
   }
@@ -190,17 +202,17 @@ class CleanerDriverImplTest {
   @DisplayName("Delete records by primary key, do not commit")
   void testDeleteRecordsByPrimaryKeyDoNotCommit() {
     try {
-      DataCreator.createData(TestConfig.TABLE_NAME+"a",10);
+      DataCreator.createData(TestConfig.TABLE_NAME + "a", 10);
       List<String> keys = new ArrayList<>();
-      for(int i=1;i<=10;i++){
+      for (int i = 1; i <= 10; i++) {
         keys.add(String.valueOf(i));
       }
-      int removed = cleanerDriver.deleteRecords(TestConfig.TABLE_NAME+"a","id", null, keys, false);
+      int removed = cleanerDriver.deleteRecords(TestConfig.TABLE_NAME + "a", "id", null, keys, false);
       assertThat(removed).isEqualTo(10);
 
-      int amount = DataCreator.executeCount(TestConfig.TABLE_NAME+"a", null);
+      int amount = DataCreator.executeCount(TestConfig.TABLE_NAME + "a", null);
       assertThat(amount).isEqualTo(10);
-    } catch (DataException e){
+    } catch (DataException e) {
       Assertions.fail();
     }
   }
@@ -208,7 +220,7 @@ class CleanerDriverImplTest {
   @Test
   @DisplayName("Delete records by primary key , exception")
   void testDeleteRecordsByPrimaryKeyException() {
-    assertThatThrownBy(() -> cleanerDriver.deleteRecords(TestConfig.TABLE_NAME,"id", "a LIKE ''a%'", new ArrayList<>(), true)).isInstanceOf(DataException.class);
+    assertThatThrownBy(() -> cleanerDriver.deleteRecords(TestConfig.TABLE_NAME, "id", "a LIKE ''a%'", new ArrayList<>(), true)).isInstanceOf(DataException.class);
   }
 
   @Test
@@ -235,33 +247,33 @@ class CleanerDriverImplTest {
   @DisplayName("Get table schema")
   void testGetTableSchema() {
     try {
-      DataCreator.createData(TestConfig.TABLE_NAME,1);
+      DataCreator.createData(TestConfig.TABLE_NAME, 1);
       Map<String, String> tableInfo = cleanerDriver.getTable(TestConfig.TABLE_NAME);
       assertThat(tableInfo).hasSize(4);
-      assertThat(tableInfo).containsKeys("name","schema","catalog","type");
-    } catch (DataException e){
+      assertThat(tableInfo).containsKeys("name", "schema", "catalog", "type");
+    } catch (DataException e) {
       Assertions.fail();
     }
   }
 
   @Test
   @DisplayName("Get table meta data , exception")
-  void testGetTableSchemaMockException() throws SQLException{
+  void testGetTableSchemaMockException() throws SQLException {
     Connection connection = Mockito.mock(Connection.class);
     cleanerDriver.setConn(connection);
     Mockito.when(connection.getMetaData()).thenThrow(SQLException.class);
     assertThatThrownBy(() -> cleanerDriver.getTable(TestConfig.TABLE_NAME)).isInstanceOf(DataException.class);
-    Mockito.verify(connection,Mockito.times(1)).getMetaData();
+    Mockito.verify(connection, Mockito.times(1)).getMetaData();
   }
 
   @Test
   @DisplayName("Get records by primary key")
   void testCountRecords() {
     try {
-      DataCreator.createData(TestConfig.TABLE_NAME,10);
+      DataCreator.createData(TestConfig.TABLE_NAME, 10);
       int amount = cleanerDriver.countRows(TestConfig.TABLE_NAME, null);
       assertThat(amount).isEqualTo(10);
-    } catch (DataException e){
+    } catch (DataException e) {
       Assertions.fail();
     }
   }
@@ -270,10 +282,10 @@ class CleanerDriverImplTest {
   @DisplayName("Get records by primary key and with where")
   void testCountRecordsWithWhere() {
     try {
-      DataCreator.createData(TestConfig.TABLE_NAME,10);
+      DataCreator.createData(TestConfig.TABLE_NAME, 10);
       int amount = cleanerDriver.countRows(TestConfig.TABLE_NAME, "a LIKE 'a%'");
       assertThat(amount).isEqualTo(10);
-    } catch (DataException e){
+    } catch (DataException e) {
       Assertions.fail();
     }
   }
@@ -284,3 +296,4 @@ class CleanerDriverImplTest {
     assertThatThrownBy(() -> cleanerDriver.countRows(TestConfig.TABLE_NAME, "a LIKE ''a%'")).isInstanceOf(DataException.class);
   }
 }
+

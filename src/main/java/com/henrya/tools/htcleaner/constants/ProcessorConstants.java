@@ -12,10 +12,22 @@ public class ProcessorConstants {
    * Mysql connection URL
    */
   public static final String CONN_URI_MYSQL = "jdbc:mysql://%s:%s/%s";
+
   /**
    * H2DB connection url
    */
-  public static final String CONN_URI_H2 = "jdbc:h2:mem:test;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;TRACE_LEVEL_FILE=3;TRACE_LEVEL_SYSTEM_OUT=2";
+  public static final String CONN_URI_H2 = "jdbc:h2:mem:test;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;TRACE_LEVEL_FILE=1;TRACE_LEVEL_SYSTEM_OUT=1";
+
+  /**
+   *  Oracle connection url
+   */
+  public static final String CONN_URI_ORACLE = "jdbc:oracle:thin:@//%s:%s/%s";
+
+  /**
+   * * Postgres connection url
+   */
+  public static final String CONN_URI_POSTGRES = "jdbc:postgresql://%s:%s/%s";
+
   /**
    *  Maximum amount of errors allowed to happen in a row
    */

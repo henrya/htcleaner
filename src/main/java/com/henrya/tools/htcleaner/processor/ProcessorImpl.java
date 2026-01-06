@@ -90,14 +90,14 @@ public class ProcessorImpl {
     );
 
     Timer timer = null;
-    if (cleaner.isNotQuiet()) {
-      ProgressUtil progressUtil = new ProgressUtil();
-      ProgressUtil.setProcessedRows(0);
-      progressUtil.setTotalRows(totalRows);
-      timer = progressUtil.displayProgress(cleaner.getProgressDelay());
-    }
-
-    ExecutorImpl taskExecutor = new ExecutorImpl(cleaner, cleanerDriver);
+            ProgressUtil progressUtil = null;
+            if (cleaner.isNotQuiet()) {
+                progressUtil = new ProgressUtil();
+                progressUtil.setTotalRows(totalRows);
+                timer = progressUtil.displayProgress(cleaner.getProgressDelay());
+            }
+    
+            ExecutorImpl taskExecutor = new ExecutorImpl(cleaner, cleanerDriver, progressUtil);
     int records = taskExecutor.runTask(timer);
     Logger.getGlobal().info(() ->
         String.format("Total records processed: %d", records)

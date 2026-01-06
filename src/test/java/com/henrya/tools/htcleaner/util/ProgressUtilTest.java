@@ -14,11 +14,10 @@ class ProgressUtilTest {
   @DisplayName("Progress utility test")
   void testProgressUtil() {
     ProgressUtil progressUtil = new ProgressUtil();
-    ProgressUtil.setProcessedRows(0);
     progressUtil.setTotalRows(20);
     Timer timer = progressUtil.displayProgress(100);
     for (int i = 0; i <= 20; i++) {
-      ProgressUtil.setProcessedRows(i);
+      progressUtil.setProcessedRows(i);
       Awaitility.await().atMost(110, TimeUnit.MILLISECONDS)
           .untilAsserted(() -> assertThat(timer).isNotNull());
     }
@@ -28,11 +27,10 @@ class ProgressUtilTest {
   @DisplayName("Progress utility test without rows")
   void testProgressUtilZeroRows() {
     ProgressUtil progressUtil = new ProgressUtil();
-    ProgressUtil.setProcessedRows(0);
     progressUtil.setTotalRows(0);
     Timer timer = progressUtil.displayProgress(100);
     for (int i = 0; i <= 20; i++) {
-      ProgressUtil.setProcessedRows(i);
+      progressUtil.setProcessedRows(i);
       Awaitility.await().atMost(110, TimeUnit.MILLISECONDS)
           .untilAsserted(() -> assertThat(timer).isNull());
     }

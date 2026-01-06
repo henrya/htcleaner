@@ -133,7 +133,7 @@ java -jar htcleaner-mysql-1.0.5-jar-with-dependencies.jar
 
 # Supported JDBC drivers
 
-As of version 1.0.0 only MySQL, support for PostgreSQL and Oracle CE is planned
+As of version 1.1.0, the tool supports MySQL, PostgreSQL, and Oracle CE.
 
 # Building
 
