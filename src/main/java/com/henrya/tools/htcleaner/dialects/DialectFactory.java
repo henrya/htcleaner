@@ -1,24 +1,28 @@
 package com.henrya.tools.htcleaner.dialects;
 
+import com.henrya.tools.htcleaner.enums.DriverEnum;
 import com.henrya.tools.htcleaner.exception.CleanerException;
 
 import javax.annotation.Nonnull;
 
-public class DialectFactory {
+public final class DialectFactory {
 
   DialectFactory() {
     throw new UnsupportedOperationException("This class cannot be initialized directly");
   }
 
   public static DatabaseDialect createDialect(@Nonnull String driver) throws CleanerException {
-    switch (driver) {
-      case "mysql":
+    DriverEnum driverEnum = DriverEnum.fromDriverName(driver)
+        .orElseThrow(() -> new CleanerException("Unexpected driver: " + driver));
+
+    switch (driverEnum) {
+      case MYSQL:
         return new MySqlDialect();
-      case "h2":
+      case H2:
         return new H2Dialect();
-      case "oracle":
+      case ORACLE:
         return new OracleDialect();
-      case "postgres":
+      case POSTGRES:
         return new PostgresDialect();
       default:
         throw new CleanerException("Unexpected driver: " + driver);

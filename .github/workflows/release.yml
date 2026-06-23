@@ -1,0 +1,78 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish release archive
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+
+    - name: Set up JDK 11
+      uses: actions/setup-java@v5
+      with:
+        distribution: 'temurin'
+        java-version: '11'
+        cache: 'maven'
+
+    - name: Resolve release version
+      id: version
+      env:
+        REF_NAME: ${{ github.ref_name }}
+      run: |
+        pom_version="$(mvn -B -q -DforceStdout help:evaluate -Dexpression=project.version)"
+        version="${REF_NAME#v}"
+        tag="${REF_NAME}"
+
+        if [[ ! "${version}" =~ ^[0-9]+(\.[0-9]+){2}([.-][0-9A-Za-z][0-9A-Za-z._-]*)?$ ]]; then
+          echo "Invalid release version: ${version}" >&2
+          exit 1
+        fi
+
+        if [[ "${version}" != "${pom_version}" ]]; then
+          echo "Release version ${version} does not match Maven project version ${pom_version}" >&2
+          exit 1
+        fi
+
+        echo "version=${version}" >> "${GITHUB_OUTPUT}"
+        echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+
+    - name: Verify with Maven
+      run: mvn -B -ntp verify
+
+    - name: Validate release archive
+      env:
+        VERSION: ${{ steps.version.outputs.version }}
+      run: |
+        archive="target/htcleaner-${VERSION}.tgz"
+        jar="htcleaner-${VERSION}-jar-with-dependencies.jar"
+
+        test -f "${archive}"
+        test "$(tar -tzf "${archive}")" = "${jar}"
+
+    - name: Publish GitHub release
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        TAG: ${{ steps.version.outputs.tag }}
+        VERSION: ${{ steps.version.outputs.version }}
+      run: |
+        gh release create "${TAG}" \
+          "target/htcleaner-${VERSION}.tgz#htcleaner-${VERSION}.tgz" \
+          --title "htcleaner ${VERSION}" \
+          --generate-notes \
+          --verify-tag

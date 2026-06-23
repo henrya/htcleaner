@@ -4,503 +4,263 @@ import com.henrya.tools.htcleaner.Cleaner;
 import com.henrya.tools.htcleaner.driver.CleanerDriverImpl;
 import com.henrya.tools.htcleaner.exception.CleanerException;
 import com.henrya.tools.htcleaner.exception.DataException;
+import com.henrya.tools.htcleaner.model.KeyRow;
+import com.henrya.tools.htcleaner.model.TableMetadata;
 import com.henrya.tools.htcleaner.tools.TestConfig;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
-import java.sql.Connection;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 
 class ProcessorImplTest {
 
   @Test
   @DisplayName("General processor execution")
   void testProcessor() throws Exception {
-    Cleaner cleaner = Mockito.spy(TestConfig.getCleaner());
-    CleanerDriverImpl cleanerDriver = Mockito.mock(CleanerDriverImpl.class);
-    Connection connection = Mockito.mock(Connection.class);
+    Cleaner cleaner = TestConfig.getCleaner();
+    CleanerDriverImpl cleanerDriver = connectedDriver(cleaner, TestConfig.primaryKeys());
+    Mockito.when(cleanerDriver.countRows(cleaner.getTable(), cleaner.getWhere())).thenReturn(2);
+    Mockito.when(cleanerDriver.getRecords(anyString(), any(), any(), anyInt()))
+        .thenReturn(TestConfig.keyRows("1", "2"))
+        .thenReturn(Collections.emptyList());
+    Mockito.when(cleanerDriver.deleteRecords(anyString(), any(), any(), any(), anyBoolean())).thenReturn(2);
 
-    Mockito.doNothing().when(cleanerDriver).connect(Mockito.anyString(),Mockito.anyInt(),Mockito.anyString(),Mockito.anyString(),Mockito.anyString());
-    Mockito.when(cleanerDriver.getConn()).thenReturn(connection);
+    new ProcessorImpl().process(cleaner, cleanerDriver);
 
-    Map<String, String> tableInfo = new HashMap<>();
-    tableInfo.put("name", cleaner.getTable());
-    List<String> primaryKeys = new ArrayList<>();
-    primaryKeys.add("ID");
-
-    Mockito.when(cleanerDriver.getTable(Mockito.anyString())).thenReturn(tableInfo);
-    Mockito.when(cleanerDriver.getPrimaryKeys(Mockito.anyString())).thenReturn(primaryKeys);
-    Mockito.when(cleanerDriver.countRows(Mockito.anyString(),Mockito.any())).thenReturn(2);
-    // executor
-    Mockito.when(cleanerDriver.getRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyInt())).thenReturn(
-        Arrays.asList("1", "2")).thenReturn(new ArrayList<>());
-    Mockito.when(cleanerDriver.deleteRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyBoolean())).thenReturn(2);
-
-    try {
-      ProcessorImpl processor = new ProcessorImpl();
-      processor.process(cleaner,cleanerDriver);
-
-      // driver
-      Mockito.verify(cleanerDriver,Mockito.times(1)).getConn();
-      Mockito.verify(cleanerDriver,Mockito.times(1)).getTable(Mockito.anyString());
-      Mockito.verify(cleanerDriver,Mockito.times(1)).getPrimaryKeys(Mockito.anyString());
-      Mockito.verify(cleanerDriver,Mockito.times(1)).countRows(Mockito.anyString(), Mockito.any());
-      Mockito.verify(cleanerDriver,Mockito.times(2)).getRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyInt());
-      Mockito.verify(cleanerDriver,Mockito.times(1)).deleteRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyBoolean());
-
-      // cleaner
-      Mockito.verify(cleaner,Mockito.times(1)).getHost();
-      Mockito.verify(cleaner,Mockito.times(1)).getDatabase();
-      Mockito.verify(cleaner,Mockito.times(1)).getUser();
-      Mockito.verify(cleaner,Mockito.times(1)).getPassword();
-      Mockito.verify(cleaner,Mockito.times(8)).getTable();
-      Mockito.verify(cleaner,Mockito.times(4)).getPrimaryKey();
-      Mockito.verify(cleaner,Mockito.times(1)).isNotQuiet();
-      Mockito.verify(cleaner,Mockito.times(1)).getProgressDelay();
-
-
-    } catch (Exception e){
-      Assertions.fail();
-    }
+    Mockito.verify(cleanerDriver).connect(cleaner.getHost(), cleaner.getPort(), cleaner.getDatabase(),
+        cleaner.getUser(), cleaner.getPassword());
+    Mockito.verify(cleanerDriver).countRows(cleaner.getTable(), cleaner.getWhere());
+    Mockito.verify(cleanerDriver, Mockito.times(2))
+        .getRecords(eq(cleaner.getTable()), eq(TestConfig.primaryKeys()), eq(cleaner.getWhere()),
+            eq(cleaner.getLimit()));
+    Mockito.verify(cleanerDriver)
+        .deleteRecords(eq(cleaner.getTable()), eq(TestConfig.primaryKeys()), eq(cleaner.getWhere()), any(), eq(true));
+    assertThat(cleaner.getPrimaryKey()).isNull();
   }
 
   @Test
   @DisplayName("General processor execution with custom PK that exists")
   void testProcessorCustomPK() throws Exception {
-    Cleaner cleaner = Mockito.spy(TestConfig.getCleaner());
-    cleaner.setPrimaryKey("ID");
-    CleanerDriverImpl cleanerDriver = Mockito.mock(CleanerDriverImpl.class);
-    Connection connection = Mockito.mock(Connection.class);
+    Cleaner cleaner = TestConfig.getCleaner();
+    cleaner.setPrimaryKey("id");
+    CleanerDriverImpl cleanerDriver = connectedDriver(cleaner, TestConfig.primaryKeys());
+    Mockito.when(cleanerDriver.countRows(cleaner.getTable(), cleaner.getWhere())).thenReturn(2);
+    Mockito.when(cleanerDriver.getRecords(anyString(), any(), any(), anyInt()))
+        .thenReturn(TestConfig.keyRows("1", "2"))
+        .thenReturn(Collections.emptyList());
+    Mockito.when(cleanerDriver.deleteRecords(anyString(), any(), any(), any(), anyBoolean())).thenReturn(2);
 
-    Mockito.doNothing().when(cleanerDriver).connect(Mockito.anyString(),Mockito.anyInt(),Mockito.anyString(),Mockito.anyString(),Mockito.anyString());
-    Mockito.when(cleanerDriver.getConn()).thenReturn(connection);
+    new ProcessorImpl().process(cleaner, cleanerDriver);
 
-    Map<String, String> tableInfo = new HashMap<>();
-    tableInfo.put("name", cleaner.getTable());
-    List<String> primaryKeys = new ArrayList<>();
-    primaryKeys.add("ID");
-
-    Mockito.when(cleanerDriver.getTable(Mockito.anyString())).thenReturn(tableInfo);
-    Mockito.when(cleanerDriver.getPrimaryKeys(Mockito.anyString())).thenReturn(primaryKeys);
-    Mockito.when(cleanerDriver.countRows(Mockito.anyString(),Mockito.any())).thenReturn(2);
-    // executor
-    Mockito.when(cleanerDriver.getRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyInt())).thenReturn(
-        Arrays.asList("1", "2")).thenReturn(new ArrayList<>());
-    Mockito.when(cleanerDriver.deleteRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyBoolean())).thenReturn(2);
-
-    try {
-      ProcessorImpl processor = new ProcessorImpl();
-      processor.process(cleaner,cleanerDriver);
-
-      // driver
-      Mockito.verify(cleanerDriver,Mockito.times(1)).getConn();
-      Mockito.verify(cleanerDriver,Mockito.times(1)).getTable(Mockito.anyString());
-      Mockito.verify(cleanerDriver,Mockito.times(1)).getPrimaryKeys(Mockito.anyString());
-      Mockito.verify(cleanerDriver,Mockito.times(1)).countRows(Mockito.anyString(), Mockito.any());
-      Mockito.verify(cleanerDriver,Mockito.times(2)).getRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyInt());
-      Mockito.verify(cleanerDriver,Mockito.times(1)).deleteRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyBoolean());
-
-      // cleaner
-      Mockito.verify(cleaner,Mockito.times(1)).getHost();
-      Mockito.verify(cleaner,Mockito.times(1)).getDatabase();
-      Mockito.verify(cleaner,Mockito.times(1)).getUser();
-      Mockito.verify(cleaner,Mockito.times(1)).getPassword();
-      Mockito.verify(cleaner,Mockito.times(8)).getTable();
-      Mockito.verify(cleaner,Mockito.times(7)).getPrimaryKey();
-      Mockito.verify(cleaner,Mockito.times(1)).isNotQuiet();
-      Mockito.verify(cleaner,Mockito.times(1)).getProgressDelay();
-
-
-    } catch (Exception e){
-      Assertions.fail();
-    }
+    Mockito.verify(cleanerDriver)
+        .deleteRecords(eq(cleaner.getTable()), eq(TestConfig.primaryKeys()), eq(cleaner.getWhere()), any(), eq(true));
+    assertThat(cleaner.getPrimaryKey()).isEqualTo("id");
   }
 
   @Test
   @DisplayName("General processor execution with custom PK that does not exist")
   void testProcessorCustomPKNotExists() throws Exception {
-    Cleaner cleaner = Mockito.spy(TestConfig.getCleaner());
+    Cleaner cleaner = TestConfig.getCleaner();
     cleaner.setPrimaryKey("PK");
-    CleanerDriverImpl cleanerDriver = Mockito.mock(CleanerDriverImpl.class);
-    Connection connection = Mockito.mock(Connection.class);
+    CleanerDriverImpl cleanerDriver = connectedDriver(cleaner, TestConfig.primaryKeys());
 
-    Mockito.doNothing().when(cleanerDriver).connect(Mockito.anyString(),Mockito.anyInt(),Mockito.anyString(),Mockito.anyString(),Mockito.anyString());
-    Mockito.when(cleanerDriver.getConn()).thenReturn(connection);
+    assertThatThrownBy(() -> new ProcessorImpl().process(cleaner, cleanerDriver))
+        .isInstanceOf(CleanerException.class)
+        .hasMessageContaining("Primary key: PK is not valid");
 
-    Map<String, String> tableInfo = new HashMap<>();
-    tableInfo.put("name", cleaner.getTable());
-    List<String> primaryKeys = new ArrayList<>();
-    primaryKeys.add("ID");
-
-    Mockito.when(cleanerDriver.getTable(Mockito.anyString())).thenReturn(tableInfo);
-    Mockito.when(cleanerDriver.getPrimaryKeys(Mockito.anyString())).thenReturn(primaryKeys);
-    Mockito.when(cleanerDriver.countRows(Mockito.anyString(),Mockito.any())).thenReturn(2);
-    // executor
-    Mockito.when(cleanerDriver.getRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyInt())).thenReturn(
-        Arrays.asList("1", "2")).thenReturn(new ArrayList<>());
-    Mockito.when(cleanerDriver.deleteRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyBoolean())).thenReturn(2);
-
-    try {
-      ProcessorImpl processor = new ProcessorImpl();
-
-      assertThatThrownBy(() -> processor.process(cleaner,cleanerDriver)).isInstanceOf(CleanerException.class)
-          .hasMessageContaining("Primary key: PK is not valid");
-
-      // driver
-      Mockito.verify(cleanerDriver,Mockito.times(1)).getConn();
-      Mockito.verify(cleanerDriver,Mockito.times(1)).getTable(Mockito.anyString());
-      Mockito.verify(cleanerDriver,Mockito.times(1)).getPrimaryKeys(Mockito.anyString());
-      Mockito.verify(cleanerDriver,Mockito.never()).countRows(Mockito.anyString(), Mockito.any());
-      Mockito.verify(cleanerDriver,Mockito.never()).getRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyInt());
-      Mockito.verify(cleanerDriver,Mockito.never()).deleteRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyBoolean());
-
-      // cleaner
-      Mockito.verify(cleaner,Mockito.times(1)).getHost();
-      Mockito.verify(cleaner,Mockito.times(1)).getDatabase();
-      Mockito.verify(cleaner,Mockito.times(1)).getUser();
-      Mockito.verify(cleaner,Mockito.times(1)).getPassword();
-      Mockito.verify(cleaner,Mockito.times(3)).getTable();
-      Mockito.verify(cleaner,Mockito.times(4)).getPrimaryKey();
-      Mockito.verify(cleaner,Mockito.never()).isNotQuiet();
-      Mockito.verify(cleaner,Mockito.never()).getProgressDelay();
-
-
-    } catch (Exception e){
-      Assertions.fail();
-    }
+    Mockito.verify(cleanerDriver, Mockito.never()).countRows(anyString(), any());
+    Mockito.verify(cleanerDriver, Mockito.never()).deleteRecords(anyString(), any(), any(), any(), anyBoolean());
   }
 
   @Test
   @DisplayName("General processor execution, do not count rows")
   void testProcessorDoNotCountRows() throws Exception {
-    Cleaner cleaner = Mockito.spy(TestConfig.getCleaner());
-    CleanerDriverImpl cleanerDriver = Mockito.mock(CleanerDriverImpl.class);
-    Connection connection = Mockito.mock(Connection.class);
-
-    // do not count rows
+    Cleaner cleaner = TestConfig.getCleaner();
     cleaner.setCountRows(false);
+    CleanerDriverImpl cleanerDriver = connectedDriver(cleaner, TestConfig.primaryKeys());
+    Mockito.when(cleanerDriver.getRecords(anyString(), any(), any(), anyInt()))
+        .thenReturn(TestConfig.keyRows("1", "2"))
+        .thenReturn(Collections.emptyList());
+    Mockito.when(cleanerDriver.deleteRecords(anyString(), any(), any(), any(), anyBoolean())).thenReturn(2);
 
-    Mockito.doNothing().when(cleanerDriver).connect(Mockito.anyString(),Mockito.anyInt(),Mockito.anyString(),Mockito.anyString(),Mockito.anyString());
-    Mockito.when(cleanerDriver.getConn()).thenReturn(connection);
+    new ProcessorImpl().process(cleaner, cleanerDriver);
 
-    Map<String, String> tableInfo = new HashMap<>();
-    tableInfo.put("name", cleaner.getTable());
-    List<String> primaryKeys = new ArrayList<>();
-    primaryKeys.add("ID");
-
-    Mockito.when(cleanerDriver.getTable(Mockito.anyString())).thenReturn(tableInfo);
-    Mockito.when(cleanerDriver.getPrimaryKeys(Mockito.anyString())).thenReturn(primaryKeys);
-    Mockito.when(cleanerDriver.countRows(Mockito.anyString(),Mockito.any())).thenReturn(2);
-    // executor
-    Mockito.when(cleanerDriver.getRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyInt())).thenReturn(
-        Arrays.asList("1", "2")).thenReturn(new ArrayList<>());
-    Mockito.when(cleanerDriver.deleteRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyBoolean())).thenReturn(2);
-
-    try {
-      ProcessorImpl processor = new ProcessorImpl();
-      processor.process(cleaner,cleanerDriver);
-
-      // driver
-      Mockito.verify(cleanerDriver,Mockito.times(1)).getConn();
-      Mockito.verify(cleanerDriver,Mockito.times(1)).getTable(Mockito.anyString());
-      Mockito.verify(cleanerDriver,Mockito.times(1)).getPrimaryKeys(Mockito.anyString());
-      Mockito.verify(cleanerDriver,Mockito.never()).countRows(Mockito.anyString(), Mockito.any());
-      Mockito.verify(cleanerDriver,Mockito.times(2)).getRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyInt());
-      Mockito.verify(cleanerDriver,Mockito.times(1)).deleteRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyBoolean());
-
-      // cleaner
-      Mockito.verify(cleaner,Mockito.times(1)).getHost();
-      Mockito.verify(cleaner,Mockito.times(1)).getDatabase();
-      Mockito.verify(cleaner,Mockito.times(1)).getUser();
-      Mockito.verify(cleaner,Mockito.times(1)).getPassword();
-      Mockito.verify(cleaner,Mockito.times(7)).getTable();
-      Mockito.verify(cleaner,Mockito.times(4)).getPrimaryKey();
-      Mockito.verify(cleaner,Mockito.times(1)).isNotQuiet();
-      Mockito.verify(cleaner,Mockito.times(1)).getProgressDelay();
-
-
-    } catch (Exception e){
-      Assertions.fail();
-    }
+    Mockito.verify(cleanerDriver, Mockito.never()).countRows(anyString(), any());
+    Mockito.verify(cleanerDriver)
+        .deleteRecords(eq(cleaner.getTable()), eq(TestConfig.primaryKeys()), eq(cleaner.getWhere()), any(), eq(true));
   }
 
   @Test
-  @DisplayName("General processor execution, quiet  kde")
+  @DisplayName("General processor execution, quiet mode")
   void testProcessorQuietMode() throws Exception {
-    Cleaner cleaner = Mockito.spy(TestConfig.getCleaner());
-    CleanerDriverImpl cleanerDriver = Mockito.mock(CleanerDriverImpl.class);
-    Connection connection = Mockito.mock(Connection.class);
-
-    // do not count rows
+    Cleaner cleaner = TestConfig.getCleaner();
     cleaner.setQuiet(true);
+    CleanerDriverImpl cleanerDriver = connectedDriver(cleaner, TestConfig.primaryKeys());
+    Mockito.when(cleanerDriver.countRows(cleaner.getTable(), cleaner.getWhere())).thenReturn(2);
+    Mockito.when(cleanerDriver.getRecords(anyString(), any(), any(), anyInt()))
+        .thenReturn(TestConfig.keyRows("1", "2"))
+        .thenReturn(Collections.emptyList());
+    Mockito.when(cleanerDriver.deleteRecords(anyString(), any(), any(), any(), anyBoolean())).thenReturn(2);
 
-    Mockito.doNothing().when(cleanerDriver).connect(Mockito.anyString(),Mockito.anyInt(),Mockito.anyString(),Mockito.anyString(),Mockito.anyString());
-    Mockito.when(cleanerDriver.getConn()).thenReturn(connection);
+    new ProcessorImpl().process(cleaner, cleanerDriver);
 
-    Map<String, String> tableInfo = new HashMap<>();
-    tableInfo.put("name", cleaner.getTable());
-    List<String> primaryKeys = new ArrayList<>();
-    primaryKeys.add("ID");
-
-    Mockito.when(cleanerDriver.getTable(Mockito.anyString())).thenReturn(tableInfo);
-    Mockito.when(cleanerDriver.getPrimaryKeys(Mockito.anyString())).thenReturn(primaryKeys);
-    Mockito.when(cleanerDriver.countRows(Mockito.anyString(),Mockito.any())).thenReturn(2);
-    // executor
-    Mockito.when(cleanerDriver.getRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyInt())).thenReturn(
-        Arrays.asList("1", "2")).thenReturn(new ArrayList<>());
-    Mockito.when(cleanerDriver.deleteRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyBoolean())).thenReturn(2);
-
-    try {
-      ProcessorImpl processor = new ProcessorImpl();
-      processor.process(cleaner,cleanerDriver);
-
-      // driver
-      Mockito.verify(cleanerDriver,Mockito.times(1)).getConn();
-      Mockito.verify(cleanerDriver,Mockito.times(1)).getTable(Mockito.anyString());
-      Mockito.verify(cleanerDriver,Mockito.times(1)).getPrimaryKeys(Mockito.anyString());
-      Mockito.verify(cleanerDriver,Mockito.times(1)).countRows(Mockito.anyString(), Mockito.any());
-      Mockito.verify(cleanerDriver,Mockito.times(2)).getRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyInt());
-      Mockito.verify(cleanerDriver,Mockito.times(1)).deleteRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyBoolean());
-
-      // cleaner
-      Mockito.verify(cleaner,Mockito.times(1)).getHost();
-      Mockito.verify(cleaner,Mockito.times(1)).getDatabase();
-      Mockito.verify(cleaner,Mockito.times(1)).getUser();
-      Mockito.verify(cleaner,Mockito.times(1)).getPassword();
-      Mockito.verify(cleaner,Mockito.times(8)).getTable();
-      Mockito.verify(cleaner,Mockito.times(4)).getPrimaryKey();
-      Mockito.verify(cleaner,Mockito.times(1)).isNotQuiet();
-      Mockito.verify(cleaner,Mockito.never()).getProgressDelay();
-
-
-    } catch (Exception e){
-      Assertions.fail();
-    }
+    Mockito.verify(cleanerDriver).countRows(cleaner.getTable(), cleaner.getWhere());
+    Mockito.verify(cleanerDriver)
+        .deleteRecords(eq(cleaner.getTable()), eq(TestConfig.primaryKeys()), eq(cleaner.getWhere()), any(), eq(true));
   }
-
 
   @Test
   @DisplayName("General processor execution, but data exception happens")
   void testProcessorDataException() throws Exception {
-    Cleaner cleaner = Mockito.spy(TestConfig.getCleaner());
-    cleaner.setPrimaryKey("ID");
-    CleanerDriverImpl cleanerDriver = Mockito.mock(CleanerDriverImpl.class);
-    Connection connection = Mockito.mock(Connection.class);
+    Cleaner cleaner = TestConfig.getCleaner();
+    CleanerDriverImpl cleanerDriver = connectedDriver(cleaner, TestConfig.primaryKeys());
+    Mockito.when(cleanerDriver.getPrimaryKeys(anyString())).thenThrow(new DataException("Cannot find rows"));
 
-    Mockito.doNothing().when(cleanerDriver).connect(Mockito.anyString(),Mockito.anyInt(),Mockito.anyString(),Mockito.anyString(),Mockito.anyString());
-    Mockito.when(cleanerDriver.getConn()).thenReturn(connection);
+    assertThatThrownBy(() -> new ProcessorImpl().process(cleaner, cleanerDriver))
+        .isInstanceOf(CleanerException.class)
+        .hasMessageContaining("Failed with an exception: Cannot find rows");
 
-    Map<String, String> tableInfo = new HashMap<>();
-    tableInfo.put("name", cleaner.getTable());
-
-    Mockito.when(cleanerDriver.getTable(Mockito.anyString())).thenReturn(tableInfo);
-    Mockito.when(cleanerDriver.getPrimaryKeys(Mockito.anyString())).thenThrow(new DataException("Cannot find rows"));
-    Mockito.when(cleanerDriver.countRows(Mockito.anyString(),Mockito.any())).thenReturn(2);
-    // executor
-    Mockito.when(cleanerDriver.getRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyInt())).thenReturn(
-        Arrays.asList("1", "2")).thenReturn(new ArrayList<>());
-    Mockito.when(cleanerDriver.deleteRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyBoolean())).thenReturn(2);
-
-    try {
-      ProcessorImpl processor = new ProcessorImpl();
-
-      processor.process(cleaner,cleanerDriver);
-
-      // driver
-      Mockito.verify(cleanerDriver,Mockito.times(1)).getConn();
-      Mockito.verify(cleanerDriver,Mockito.times(1)).getTable(Mockito.anyString());
-      Mockito.verify(cleanerDriver,Mockito.times(1)).getPrimaryKeys(Mockito.anyString());
-      Mockito.verify(cleanerDriver,Mockito.never()).countRows(Mockito.anyString(), Mockito.any());
-      Mockito.verify(cleanerDriver,Mockito.never()).getRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyInt());
-      Mockito.verify(cleanerDriver,Mockito.never()).deleteRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyBoolean());
-
-      // cleaner
-      Mockito.verify(cleaner,Mockito.times(1)).getHost();
-      Mockito.verify(cleaner,Mockito.times(1)).getDatabase();
-      Mockito.verify(cleaner,Mockito.times(1)).getUser();
-      Mockito.verify(cleaner,Mockito.times(1)).getPassword();
-      Mockito.verify(cleaner,Mockito.times(3)).getTable();
-      Mockito.verify(cleaner,Mockito.never()).getPrimaryKey();
-      Mockito.verify(cleaner,Mockito.never()).isNotQuiet();
-      Mockito.verify(cleaner,Mockito.never()).getProgressDelay();
-
-
-    } catch (Exception e){
-      Assertions.fail();
-    }
+    Mockito.verify(cleanerDriver, Mockito.never()).countRows(anyString(), any());
+    Mockito.verify(cleanerDriver, Mockito.never()).deleteRecords(anyString(), any(), any(), any(), anyBoolean());
   }
 
   @Test
   @DisplayName("General processor execution, no primary keys")
   void testProcessorNoPrimaryKeys() throws Exception {
-    Cleaner cleaner = Mockito.spy(TestConfig.getCleaner());
+    Cleaner cleaner = TestConfig.getCleaner();
+    CleanerDriverImpl cleanerDriver = connectedDriver(cleaner, Collections.emptyList());
 
-    CleanerDriverImpl cleanerDriver = Mockito.mock(CleanerDriverImpl.class);
-    Connection connection = Mockito.mock(Connection.class);
+    assertThatThrownBy(() -> new ProcessorImpl().process(cleaner, cleanerDriver))
+        .isInstanceOf(CleanerException.class)
+        .hasMessageContaining("Cannot find primary keys!");
 
-    Mockito.doNothing().when(cleanerDriver).connect(Mockito.anyString(),Mockito.anyInt(),Mockito.anyString(),Mockito.anyString(),Mockito.anyString());
-    Mockito.when(cleanerDriver.getConn()).thenReturn(connection);
-
-    Map<String, String> tableInfo = new HashMap<>();
-    tableInfo.put("name", cleaner.getTable());
-
-    Mockito.when(cleanerDriver.getTable(Mockito.anyString())).thenReturn(tableInfo);
-    Mockito.when(cleanerDriver.getPrimaryKeys(Mockito.anyString())).thenReturn(new ArrayList<>());
-    Mockito.when(cleanerDriver.countRows(Mockito.anyString(),Mockito.any())).thenReturn(2);
-    // executor
-    Mockito.when(cleanerDriver.getRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyInt())).thenReturn(
-        Arrays.asList("1", "2")).thenReturn(new ArrayList<>());
-    Mockito.when(cleanerDriver.deleteRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyBoolean())).thenReturn(2);
-
-    try {
-      ProcessorImpl processor = new ProcessorImpl();
-
-      assertThatThrownBy(() -> processor.process(cleaner,cleanerDriver)).isInstanceOf(CleanerException.class)
-          .hasMessageContaining("Cannot find primary keys!");
-
-      // driver
-      Mockito.verify(cleanerDriver,Mockito.times(1)).getConn();
-      Mockito.verify(cleanerDriver,Mockito.times(1)).getTable(Mockito.anyString());
-      Mockito.verify(cleanerDriver,Mockito.times(1)).getPrimaryKeys(Mockito.anyString());
-      Mockito.verify(cleanerDriver,Mockito.never()).countRows(Mockito.anyString(), Mockito.any());
-      Mockito.verify(cleanerDriver,Mockito.never()).getRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyInt());
-      Mockito.verify(cleanerDriver,Mockito.never()).deleteRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyBoolean());
-
-      // cleaner
-      Mockito.verify(cleaner,Mockito.times(1)).getHost();
-      Mockito.verify(cleaner,Mockito.times(1)).getDatabase();
-      Mockito.verify(cleaner,Mockito.times(1)).getUser();
-      Mockito.verify(cleaner,Mockito.times(1)).getPassword();
-      Mockito.verify(cleaner,Mockito.times(3)).getTable();
-      Mockito.verify(cleaner,Mockito.times(1)).getPrimaryKey();
-      Mockito.verify(cleaner,Mockito.never()).isNotQuiet();
-      Mockito.verify(cleaner,Mockito.never()).getProgressDelay();
-
-    } catch (Exception e){
-      Assertions.fail();
-    }
+    Mockito.verify(cleanerDriver, Mockito.never()).countRows(anyString(), any());
+    Mockito.verify(cleanerDriver, Mockito.never()).deleteRecords(anyString(), any(), any(), any(), anyBoolean());
   }
 
   @Test
   @DisplayName("General processor execution, primaryKey parameter empty")
   void testProcessorEmptyCleanerPrimaryKey() throws Exception {
-    Cleaner cleaner = Mockito.spy(TestConfig.getCleaner());
-
+    Cleaner cleaner = TestConfig.getCleaner();
     cleaner.setPrimaryKey("");
+    CleanerDriverImpl cleanerDriver = connectedDriver(cleaner, Collections.emptyList());
 
-    CleanerDriverImpl cleanerDriver = Mockito.mock(CleanerDriverImpl.class);
-    Connection connection = Mockito.mock(Connection.class);
-
-    Mockito.doNothing().when(cleanerDriver).connect(Mockito.anyString(),Mockito.anyInt(),Mockito.anyString(),Mockito.anyString(),Mockito.anyString());
-    Mockito.when(cleanerDriver.getConn()).thenReturn(connection);
-
-    Map<String, String> tableInfo = new HashMap<>();
-    tableInfo.put("name", cleaner.getTable());
-
-    Mockito.when(cleanerDriver.getTable(Mockito.anyString())).thenReturn(tableInfo);
-    Mockito.when(cleanerDriver.getPrimaryKeys(Mockito.anyString())).thenReturn(new ArrayList<>());
-    Mockito.when(cleanerDriver.countRows(Mockito.anyString(),Mockito.any())).thenReturn(2);
-    // executor
-    Mockito.when(cleanerDriver.getRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyInt())).thenReturn(
-        Arrays.asList("1", "2")).thenReturn(new ArrayList<>());
-    Mockito.when(cleanerDriver.deleteRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyBoolean())).thenReturn(2);
-
-    try {
-      ProcessorImpl processor = new ProcessorImpl();
-
-      assertThatThrownBy(() -> processor.process(cleaner,cleanerDriver)).isInstanceOf(CleanerException.class)
-          .hasMessageContaining("Cannot find primary keys!");
-
-      // driver
-      Mockito.verify(cleanerDriver,Mockito.times(1)).getConn();
-      Mockito.verify(cleanerDriver,Mockito.times(1)).getTable(Mockito.anyString());
-      Mockito.verify(cleanerDriver,Mockito.times(1)).getPrimaryKeys(Mockito.anyString());
-      Mockito.verify(cleanerDriver,Mockito.never()).countRows(Mockito.anyString(), Mockito.any());
-      Mockito.verify(cleanerDriver,Mockito.never()).getRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyInt());
-      Mockito.verify(cleanerDriver,Mockito.never()).deleteRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyBoolean());
-
-      // cleaner
-      Mockito.verify(cleaner,Mockito.times(1)).getHost();
-      Mockito.verify(cleaner,Mockito.times(1)).getDatabase();
-      Mockito.verify(cleaner,Mockito.times(1)).getUser();
-      Mockito.verify(cleaner,Mockito.times(1)).getPassword();
-      Mockito.verify(cleaner,Mockito.times(3)).getTable();
-      Mockito.verify(cleaner,Mockito.times(2)).getPrimaryKey();
-      Mockito.verify(cleaner,Mockito.never()).isNotQuiet();
-      Mockito.verify(cleaner,Mockito.never()).getProgressDelay();
-
-    } catch (Exception e){
-      Assertions.fail();
-    }
+    assertThatThrownBy(() -> new ProcessorImpl().process(cleaner, cleanerDriver))
+        .isInstanceOf(CleanerException.class)
+        .hasMessageContaining("Cannot find primary keys!");
   }
 
   @Test
-  @DisplayName("General processor execution with custom PK that does not exist")
-  void testProcessorTableNotExist() throws Exception {
-    Cleaner cleaner = Mockito.spy(TestConfig.getCleaner());
-    cleaner.setPrimaryKey("PK");
+  @DisplayName("Composite primary key cannot be overridden")
+  void testProcessorCompositePrimaryKeyOverride() throws Exception {
+    Cleaner cleaner = TestConfig.getCleaner();
+    cleaner.setPrimaryKey("ID");
+    CleanerDriverImpl cleanerDriver = connectedDriver(cleaner, Arrays.asList("TENANT_ID", "ID"));
+
+    assertThatThrownBy(() -> new ProcessorImpl().process(cleaner, cleanerDriver))
+        .isInstanceOf(CleanerException.class)
+        .hasMessageContaining("--primary-key cannot override a composite primary key");
+
+    Mockito.verify(cleanerDriver, Mockito.never()).deleteRecords(anyString(), any(), any(), any(), anyBoolean());
+  }
+
+  @Test
+  @DisplayName("Composite primary key is used when detected")
+  void testProcessorCompositePrimaryKey() throws Exception {
+    Cleaner cleaner = TestConfig.getCleaner();
+    CleanerDriverImpl cleanerDriver = connectedDriver(cleaner, Arrays.asList("TENANT_ID", "ID"));
+    List<String> primaryKeys = Arrays.asList("TENANT_ID", "ID");
+    List<KeyRow> keyRows = Collections.singletonList(new KeyRow(primaryKeys, Arrays.asList(1, 10)));
+    Mockito.when(cleanerDriver.countRows(cleaner.getTable(), cleaner.getWhere())).thenReturn(1);
+    Mockito.when(cleanerDriver.getRecords(anyString(), any(), any(), anyInt()))
+        .thenReturn(keyRows)
+        .thenReturn(Collections.emptyList());
+    Mockito.when(cleanerDriver.deleteRecords(anyString(), any(), any(), any(), anyBoolean())).thenReturn(1);
+
+    new ProcessorImpl().process(cleaner, cleanerDriver);
+
+    Mockito.verify(cleanerDriver).deleteRecords(eq(cleaner.getTable()), eq(primaryKeys), eq(cleaner.getWhere()),
+        eq(keyRows), eq(true));
+    assertThat(cleaner.getPrimaryKey()).isNull();
+  }
+
+  @Test
+  @DisplayName("Processor uses canonical table name from metadata")
+  void testProcessorUsesCanonicalTableName() throws Exception {
+    Cleaner cleaner = TestConfig.getCleaner();
+    cleaner.setTable("ORDERS");
     CleanerDriverImpl cleanerDriver = Mockito.mock(CleanerDriverImpl.class);
-    Connection connection = Mockito.mock(Connection.class);
+    TableMetadata tableInfo = new TableMetadata("orders", "public", null, "TABLE");
 
-    Mockito.doNothing().when(cleanerDriver).connect(Mockito.anyString(),Mockito.anyInt(),Mockito.anyString(),Mockito.anyString(),Mockito.anyString());
-    Mockito.when(cleanerDriver.getConn()).thenReturn(connection);
+    Mockito.doNothing().when(cleanerDriver)
+        .connect(anyString(), anyInt(), anyString(), anyString(), anyString());
+    Mockito.when(cleanerDriver.isConnected()).thenReturn(true);
+    Mockito.when(cleanerDriver.getTable("ORDERS")).thenReturn(Optional.of(tableInfo));
+    Mockito.when(cleanerDriver.getPrimaryKeys("public.orders")).thenReturn(TestConfig.primaryKeys());
+    Mockito.when(cleanerDriver.countRows("public.orders", cleaner.getWhere())).thenReturn(0);
+    Mockito.when(cleanerDriver.getRecords("public.orders", TestConfig.primaryKeys(), cleaner.getWhere(),
+            cleaner.getLimit()))
+        .thenReturn(Collections.emptyList());
 
-    List<String> primaryKeys = new ArrayList<>();
-    primaryKeys.add("ID");
+    new ProcessorImpl().process(cleaner, cleanerDriver);
 
-    Mockito.when(cleanerDriver.getTable(Mockito.anyString())).thenReturn(new HashMap<>());
-    Mockito.when(cleanerDriver.getPrimaryKeys(Mockito.anyString())).thenReturn(primaryKeys);
-    Mockito.when(cleanerDriver.countRows(Mockito.anyString(),Mockito.any())).thenReturn(2);
-    // executor
-    Mockito.when(cleanerDriver.getRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyInt())).thenReturn(
-        Arrays.asList("1", "2")).thenReturn(new ArrayList<>());
-    Mockito.when(cleanerDriver.deleteRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyBoolean())).thenReturn(2);
+    assertThat(cleaner.getTable()).isEqualTo("ORDERS");
+    Mockito.verify(cleanerDriver).getPrimaryKeys("public.orders");
+    Mockito.verify(cleanerDriver).getRecords("public.orders", TestConfig.primaryKeys(), cleaner.getWhere(),
+        cleaner.getLimit());
+  }
 
-    try {
-      ProcessorImpl processor = new ProcessorImpl();
-      processor.process(cleaner,cleanerDriver);
-      // driver
-      Mockito.verify(cleanerDriver,Mockito.times(1)).getConn();
-      Mockito.verify(cleanerDriver,Mockito.times(1)).getTable(Mockito.anyString());
-      Mockito.verify(cleanerDriver,Mockito.never()).getPrimaryKeys(Mockito.anyString());
-      Mockito.verify(cleanerDriver,Mockito.never()).countRows(Mockito.anyString(), Mockito.any());
-      Mockito.verify(cleanerDriver,Mockito.never()).getRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyInt());
-      Mockito.verify(cleanerDriver,Mockito.never()).deleteRecords(Mockito.any(),Mockito.any(),Mockito.any(),Mockito.any(),Mockito.anyBoolean());
+  @Test
+  @DisplayName("General processor execution with missing table")
+  void testProcessorTableNotExist() throws Exception {
+    Cleaner cleaner = TestConfig.getCleaner();
+    CleanerDriverImpl cleanerDriver = connectedDriver(cleaner, TestConfig.primaryKeys());
+    Mockito.when(cleanerDriver.getTable(anyString())).thenReturn(Optional.empty());
 
-      // cleaner
-      Mockito.verify(cleaner,Mockito.times(1)).getHost();
-      Mockito.verify(cleaner,Mockito.times(1)).getDatabase();
-      Mockito.verify(cleaner,Mockito.times(1)).getUser();
-      Mockito.verify(cleaner,Mockito.times(1)).getPassword();
-      Mockito.verify(cleaner,Mockito.times(2)).getTable();
-      Mockito.verify(cleaner,Mockito.never()).getPrimaryKey();
-      Mockito.verify(cleaner,Mockito.never()).isNotQuiet();
-      Mockito.verify(cleaner,Mockito.never()).getProgressDelay();
+    assertThatThrownBy(() -> new ProcessorImpl().process(cleaner, cleanerDriver))
+        .isInstanceOf(CleanerException.class)
+        .hasMessageContaining("Table testtable does not exist!");
 
-
-    } catch (Exception e){
-      Assertions.fail();
-    }
+    Mockito.verify(cleanerDriver, Mockito.never()).getPrimaryKeys(anyString());
+    Mockito.verify(cleanerDriver, Mockito.never()).deleteRecords(anyString(), any(), any(), any(), anyBoolean());
   }
 
   @Test
   void testProcessorNoConnection() throws Exception {
-    Cleaner cleaner = Mockito.spy(TestConfig.getCleaner());
+    Cleaner cleaner = TestConfig.getCleaner();
     CleanerDriverImpl cleanerDriver = Mockito.mock(CleanerDriverImpl.class);
-    Mockito.doNothing().when(cleanerDriver).connect(Mockito.anyString(),Mockito.anyInt(),Mockito.anyString(),Mockito.anyString(),Mockito.anyString());
-    try {
-      ProcessorImpl processor = new ProcessorImpl();
-      processor.process(cleaner,cleanerDriver);
-      Mockito.verify(cleanerDriver,Mockito.never()).getTable(Mockito.anyString());
-    } catch (CleanerException e){
-      Assertions.fail();
-    }
+    Mockito.doNothing().when(cleanerDriver)
+        .connect(anyString(), anyInt(), anyString(), anyString(), anyString());
+    Mockito.when(cleanerDriver.isConnected()).thenReturn(false);
+
+    assertThatThrownBy(() -> new ProcessorImpl().process(cleaner, cleanerDriver))
+        .isInstanceOf(CleanerException.class)
+        .hasMessageContaining("Connection was not established");
+
+    Mockito.verify(cleanerDriver, Mockito.never()).getTable(anyString());
+  }
+
+  private CleanerDriverImpl connectedDriver(Cleaner cleaner, List<String> primaryKeys) throws Exception {
+    CleanerDriverImpl cleanerDriver = Mockito.mock(CleanerDriverImpl.class);
+    TableMetadata tableInfo = new TableMetadata(cleaner.getTable(), null, null, "TABLE");
+
+    Mockito.doNothing().when(cleanerDriver)
+        .connect(anyString(), anyInt(), anyString(), anyString(), anyString());
+    Mockito.when(cleanerDriver.isConnected()).thenReturn(true);
+    Mockito.when(cleanerDriver.getTable(anyString())).thenReturn(Optional.of(tableInfo));
+    Mockito.when(cleanerDriver.getPrimaryKeys(anyString())).thenReturn(primaryKeys);
+    return cleanerDriver;
   }
 }

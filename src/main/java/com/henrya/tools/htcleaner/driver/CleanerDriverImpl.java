@@ -4,39 +4,36 @@ import com.henrya.tools.htcleaner.dialects.DatabaseDialect;
 import com.henrya.tools.htcleaner.dialects.DialectFactory;
 import com.henrya.tools.htcleaner.exception.CleanerException;
 import com.henrya.tools.htcleaner.exception.DataException;
+import com.henrya.tools.htcleaner.model.KeyRow;
+import com.henrya.tools.htcleaner.model.TableMetadata;
+import com.henrya.tools.htcleaner.sql.SqlPredicate;
 
 import javax.annotation.Nonnull;
 import java.sql.Connection;
-import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.Optional;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * The JDBC driver class implementing the low level logic for the executor
+ * JDBC-backed cleaner driver.
  */
-public class CleanerDriverImpl implements CleanerDriver {
+public final class CleanerDriverImpl implements CleanerDriver, AutoCloseable {
 
   /**
    * Connection instance
    */
-  Connection conn = null;
-
-  /**
-   * Driver name
-   */
-  String driver;
+  private Connection conn = null;
 
   /**
    * Database dialect
    */
-  DatabaseDialect dialect;
+  private final DatabaseDialect dialect;
 
   /**
    * Cleaner driver constructor
@@ -44,35 +41,36 @@ public class CleanerDriverImpl implements CleanerDriver {
    * @param driver Driver name
    */
   public CleanerDriverImpl(String driver) throws CleanerException {
-    this.driver = driver;
     this.dialect = DialectFactory.createDialect(driver);
   }
 
   /**
-   * Will connect to the database
+   * Opens a JDBC connection.
    *
    * @param host     host name
    * @param port     port
    * @param database database/schema name
    * @param user     user name
-   * @param password password
-   * @throws DataException Exception to be thrown
+   * @param password optional password
+   * @throws DataException when the connection cannot be opened
    */
   @Override
-  public void connect(@Nonnull String host, @Nonnull Integer port, @Nonnull String database, @Nonnull String user, @Nonnull String password) throws DataException {
+  public void connect(@Nonnull String host, @Nonnull Integer port, @Nonnull String database, @Nonnull String user,
+      String password) throws DataException {
     try {
-      this.conn = DriverManager.getConnection(String.format(dialect.getConnectionURI(), host, port, database), user, password);
+      this.conn = DriverManager.getConnection(String.format(dialect.getConnectionURI(), host, port, database), user,
+          password);
     } catch (SQLException e) {
-      throw new DataException(String.format("Failed to connect: %s", e.getMessage()));
+      throw new DataException(String.format("Failed to connect: %s", e.getMessage()), e);
     }
   }
 
   /**
-   * Detects primary keys for the specified table
+   * Detects primary keys for the specified table.
    *
    * @param table table name
    * @return List<String> of primary keys
-   * @throws DataException Exception to be thrown
+   * @throws DataException when primary-key metadata cannot be read
    */
   @Override
   public List<String> getPrimaryKeys(@Nonnull String table) throws DataException {
@@ -80,25 +78,26 @@ public class CleanerDriverImpl implements CleanerDriver {
   }
 
   /**
-   * Fetch record by primary key
+   * Fetch records by primary key.
    *
    * @param table      table name
-   * @param primaryKey primary key
+   * @param primaryKeys primary keys
    * @param where      optional where statement
    * @param limit      chunk size
-   * @return List<String> List of records
+   * @return List<KeyRow> List of records
    * @throws DataException Exception thrown
    */
   @Override
-  public List<String> getRecords(@Nonnull String table, @Nonnull String primaryKey, String where, int limit) throws DataException {
-    return dialect.getRecords(conn, table, primaryKey, where, limit);
+  public List<KeyRow> getRecords(@Nonnull String table, @Nonnull List<String> primaryKeys, String where, int limit)
+      throws DataException {
+    return dialect.getRecords(conn, table, primaryKeys, normalizeWhere(where), limit);
   }
 
   /**
-   * Removes records from the table by primary key
+   * Removes records from the table by primary key.
    *
    * @param table      Table name
-   * @param primaryKey Primary key
+   * @param primaryKeys Primary keys
    * @param where      Where statement
    * @param keys       List of keys to be removed
    * @param doCommit   Whether to commit operation or not
@@ -106,22 +105,36 @@ public class CleanerDriverImpl implements CleanerDriver {
    * @throws DataException Exception thrown
    */
   @Override
-  public int deleteRecords(@Nonnull String table, @Nonnull String primaryKey, String where, @Nonnull List<String> keys, boolean doCommit) throws DataException {
-    try (Statement stmt = conn.createStatement()) {
+  public int deleteRecords(@Nonnull String table, @Nonnull List<String> primaryKeys, String where,
+      @Nonnull List<KeyRow> keys, boolean doCommit) throws DataException {
+    if (keys.isEmpty()) {
+      return 0;
+    }
+
+    boolean originalAutoCommit = true;
+    try {
+      originalAutoCommit = conn.getAutoCommit();
       conn.setAutoCommit(false);
-      String sql = String.format("DELETE FROM %s WHERE %s IN ('%s') %s", table, primaryKey, String.join(
-          "','", keys), (where != null) ? " AND " + where : "");
-      return stmt.executeUpdate(sql);
+
+      String sql = dialect.buildDeleteSql(table, primaryKeys, normalizeWhere(where), keys);
+      try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+        bindKeys(stmt, primaryKeys, keys);
+        int updates = stmt.executeUpdate();
+        if (doCommit) {
+          conn.commit();
+        } else {
+          conn.rollback();
+        }
+        return updates;
+      }
     } catch (SQLException e) {
-      throw new DataException(String.format("Cannot delete records, table %s: %s", table, e));
+      rollbackQuietly();
+      throw new DataException(String.format("Cannot delete records, table %s: %s", table, e), e);
     } finally {
       try {
-        // do not commit in dry run mode
-        conn.setAutoCommit(doCommit);
+        conn.setAutoCommit(originalAutoCommit);
       } catch (SQLException e) {
-        Logger.getGlobal().log(Level.SEVERE, () ->
-            String.format("Failed to commit, failed with an exception: %s", e.getMessage())
-        );
+        Logger.getGlobal().log(Level.SEVERE, "Failed to restore auto-commit", e);
       }
     }
   }
@@ -130,29 +143,16 @@ public class CleanerDriverImpl implements CleanerDriver {
    * Get table metadata
    *
    * @param table Table name
-   * @return Map<String, String> Table metadata
+   * @return table metadata when the table exists
    * @throws DataException Exception thrown
    */
   @Override
-  public Map<String, String> getTable(@Nonnull String table) throws DataException {
-    Map<String, String> tableInfo = new HashMap<>();
-    try {
-      DatabaseMetaData meta = conn.getMetaData();
-      ResultSet resultSet = meta.getTables(null, null, table.toUpperCase(), new String[]{"TABLE"});
-      while (resultSet.next()) {
-        tableInfo.put("name", resultSet.getString("TABLE_NAME"));
-        tableInfo.put("schema", resultSet.getString("TABLE_SCHEM"));
-        tableInfo.put("catalog", resultSet.getString("TABLE_CAT"));
-        tableInfo.put("type", resultSet.getString("TABLE_TYPE"));
-      }
-      return tableInfo;
-    } catch (SQLException e) {
-      throw new DataException(String.format("Cannot get table: %s", table));
-    }
+  public Optional<TableMetadata> getTable(@Nonnull String table) throws DataException {
+    return dialect.getTable(conn, table);
   }
 
   /**
-   * Count amount of the rows in the table
+   * Counts rows in the table.
    *
    * @param table Table name
    * @param where Where statement
@@ -162,12 +162,15 @@ public class CleanerDriverImpl implements CleanerDriver {
   @Override
   public int countRows(@Nonnull String table, String where) throws DataException {
     try (Statement stmt = conn.createStatement()) {
-      String sql = String.format("SELECT COUNT(1) as ROWS FROM %s %s", table, (where != null) ? " WHERE " + where : "");
-      ResultSet rs = stmt.executeQuery(sql);
-      rs.next();
-      return rs.getInt("ROWS");
+      String normalizedWhere = normalizeWhere(where);
+      String sql = String.format("SELECT COUNT(1) as ROWS FROM %s %s",
+          dialect.quoteIdentifier(table), (normalizedWhere != null) ? " WHERE " + normalizedWhere : "");
+      try (ResultSet rs = stmt.executeQuery(sql)) {
+        rs.next();
+        return rs.getInt("ROWS");
+      }
     } catch (SQLException e) {
-      throw new DataException(String.format("Execution failed, table %s: %s", table, e));
+      throw new DataException(String.format("Execution failed, table %s: %s", table, e), e);
     }
   }
 
@@ -176,7 +179,7 @@ public class CleanerDriverImpl implements CleanerDriver {
    *
    * @return Connection connection
    */
-  public Connection getConn() {
+  Connection getConn() {
     return conn;
   }
 
@@ -185,13 +188,23 @@ public class CleanerDriverImpl implements CleanerDriver {
    *
    * @param conn Connection
    */
-  public void setConn(Connection conn) {
+  void setConn(Connection conn) {
     this.conn = conn;
+  }
+
+  @Override
+  public boolean isConnected() {
+    try {
+      return conn != null && !conn.isClosed();
+    } catch (SQLException e) {
+      return false;
+    }
   }
 
   /**
    * Closes the connection
    */
+  @Override
   public void close() {
     try {
       if (conn != null) {
@@ -199,6 +212,40 @@ public class CleanerDriverImpl implements CleanerDriver {
       }
     } catch (SQLException e) {
       Logger.getGlobal().log(Level.SEVERE, "Failed to close the connection", e);
+    } finally {
+      conn = null;
+    }
+  }
+
+  private void bindKeys(PreparedStatement stmt, List<String> primaryKeys, List<KeyRow> keys)
+      throws SQLException, DataException {
+    int index = 1;
+    for (KeyRow key : keys) {
+      validateKeyRow(primaryKeys, key);
+      for (Object value : key.getValues()) {
+        stmt.setObject(index++, value);
+      }
+    }
+  }
+
+  private void validateKeyRow(List<String> primaryKeys, KeyRow key) throws DataException {
+    if (!key.getColumns().equals(primaryKeys)) {
+      throw new DataException("Fetched key row does not match primary key metadata");
+    }
+  }
+
+  private String normalizeWhere(String where) throws DataException {
+    return SqlPredicate.normalize(where);
+  }
+
+  private void rollbackQuietly() {
+    if (conn == null) {
+      return;
+    }
+    try {
+      conn.rollback();
+    } catch (SQLException e) {
+      Logger.getGlobal().log(Level.SEVERE, "Rollback failed", e);
     }
   }
 }

@@ -3,6 +3,8 @@ package com.henrya.tools.htcleaner.driver;
 import com.henrya.tools.htcleaner.Cleaner;
 import com.henrya.tools.htcleaner.exception.CleanerException;
 import com.henrya.tools.htcleaner.exception.DataException;
+import com.henrya.tools.htcleaner.model.KeyRow;
+import com.henrya.tools.htcleaner.model.TableMetadata;
 import com.henrya.tools.htcleaner.tools.DataCreator;
 import com.henrya.tools.htcleaner.tools.TestConfig;
 import org.junit.jupiter.api.AfterEach;
@@ -15,8 +17,9 @@ import org.mockito.Mockito;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
-import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -36,6 +39,10 @@ class CleanerDriverImplTest {
   @AfterEach
   void tearDown() {
     DataCreator.executeUpdate("DROP TABLE IF EXISTS " + TestConfig.TABLE_NAME);
+    DataCreator.executeUpdate("DROP TABLE IF EXISTS " + TestConfig.TABLE_NAME + "a");
+    DataCreator.executeUpdate("DROP TABLE IF EXISTS " + TestConfig.TABLE_NAME + "b");
+    DataCreator.executeUpdate("DROP TABLE IF EXISTS " + TestConfig.TABLE_NAME + "_composite");
+    DataCreator.executeUpdate("DROP TABLE IF EXISTS " + TestConfig.TABLE_NAME + "_string_key");
     cleanerDriver.close();
   }
 
@@ -44,7 +51,17 @@ class CleanerDriverImplTest {
   void testConnection() {
     Connection connection = cleanerDriver.getConn();
     assertThat(connection).isNotNull();
+    assertThat(cleanerDriver.isConnected()).isTrue();
     assertThat(cleanerDriver).isNotNull();
+  }
+
+  @Test
+  @DisplayName("Close clears connection state")
+  void testCloseClearsConnectionState() {
+    cleanerDriver.close();
+
+    assertThat(cleanerDriver.isConnected()).isFalse();
+    assertThat(cleanerDriver.getConn()).isNull();
   }
 
   @Test
@@ -141,7 +158,7 @@ class CleanerDriverImplTest {
   void testGetRecordsByPrimaryKey() {
     try {
       DataCreator.createData(TestConfig.TABLE_NAME, 10);
-      List<String> ids = cleanerDriver.getRecords(TestConfig.TABLE_NAME, "id", null, 10);
+      List<KeyRow> ids = cleanerDriver.getRecords(TestConfig.TABLE_NAME, TestConfig.primaryKeys(), null, 10);
       assertThat(ids).hasSize(10);
     } catch (DataException e) {
       Assertions.fail();
@@ -153,7 +170,7 @@ class CleanerDriverImplTest {
   void testGetRecordsByPrimaryKeyWithWhere() {
     try {
       DataCreator.createData(TestConfig.TABLE_NAME, 10);
-      List<String> ids = cleanerDriver.getRecords(TestConfig.TABLE_NAME, "id", "a LIKE 'a%'", 10);
+      List<KeyRow> ids = cleanerDriver.getRecords(TestConfig.TABLE_NAME, TestConfig.primaryKeys(), "a LIKE 'a%'", 10);
       assertThat(ids).hasSize(10);
     } catch (DataException e) {
       Assertions.fail();
@@ -163,7 +180,7 @@ class CleanerDriverImplTest {
   @Test
   @DisplayName("Get records by primary key , exception")
   void testGetRecordsByPrimaryKeyException() {
-    assertThatThrownBy(() -> cleanerDriver.getRecords(TestConfig.TABLE_NAME, "id", "a LIKE ''a%'", 1)).isInstanceOf(DataException.class);
+    assertThatThrownBy(() -> cleanerDriver.getRecords(TestConfig.TABLE_NAME, TestConfig.primaryKeys(), "a LIKE ''a%'", 1)).isInstanceOf(DataException.class);
   }
 
   @Test
@@ -171,11 +188,11 @@ class CleanerDriverImplTest {
   void tesDeleteRecordsByPrimaryKey() {
     try {
       DataCreator.createData(TestConfig.TABLE_NAME, 10);
-      List<String> keys = new ArrayList<>();
+      List<KeyRow> keys = new ArrayList<>();
       for (int i = 1; i <= 10; i++) {
-        keys.add(String.valueOf(i));
+        keys.add(new KeyRow(TestConfig.primaryKeys(), Collections.singletonList(i)));
       }
-      int removed = cleanerDriver.deleteRecords(TestConfig.TABLE_NAME, "id", null, keys, true);
+      int removed = cleanerDriver.deleteRecords(TestConfig.TABLE_NAME, TestConfig.primaryKeys(), null, keys, true);
       assertThat(removed).isEqualTo(10);
     } catch (DataException e) {
       Assertions.fail();
@@ -187,11 +204,11 @@ class CleanerDriverImplTest {
   void tesDeleteRecordsByPrimaryKeyWithWhere() {
     try {
       DataCreator.createData(TestConfig.TABLE_NAME, 10);
-      List<String> keys = new ArrayList<>();
+      List<KeyRow> keys = new ArrayList<>();
       for (int i = 1; i <= 10; i++) {
-        keys.add(String.valueOf(i));
+        keys.add(new KeyRow(TestConfig.primaryKeys(), Collections.singletonList(i)));
       }
-      int removed = cleanerDriver.deleteRecords(TestConfig.TABLE_NAME, "id", "a LIKE 'a%'", keys, true);
+      int removed = cleanerDriver.deleteRecords(TestConfig.TABLE_NAME, TestConfig.primaryKeys(), "a LIKE 'a%'", keys, true);
       assertThat(removed).isEqualTo(10);
     } catch (DataException e) {
       Assertions.fail();
@@ -203,11 +220,11 @@ class CleanerDriverImplTest {
   void testDeleteRecordsByPrimaryKeyDoNotCommit() {
     try {
       DataCreator.createData(TestConfig.TABLE_NAME + "a", 10);
-      List<String> keys = new ArrayList<>();
+      List<KeyRow> keys = new ArrayList<>();
       for (int i = 1; i <= 10; i++) {
-        keys.add(String.valueOf(i));
+        keys.add(new KeyRow(TestConfig.primaryKeys(), Collections.singletonList(i)));
       }
-      int removed = cleanerDriver.deleteRecords(TestConfig.TABLE_NAME + "a", "id", null, keys, false);
+      int removed = cleanerDriver.deleteRecords(TestConfig.TABLE_NAME + "a", TestConfig.primaryKeys(), null, keys, false);
       assertThat(removed).isEqualTo(10);
 
       int amount = DataCreator.executeCount(TestConfig.TABLE_NAME + "a", null);
@@ -218,26 +235,82 @@ class CleanerDriverImplTest {
   }
 
   @Test
+  @DisplayName("Delete records by composite primary key")
+  void testDeleteRecordsByCompositePrimaryKey() {
+    try {
+      String table = TestConfig.TABLE_NAME + "_composite";
+      DataCreator.createCompositeData(table, 6);
+      List<String> primaryKeys = cleanerDriver.getPrimaryKeys(table);
+      assertThat(primaryKeys).containsExactly("TENANT_ID", "ID");
+
+      List<KeyRow> keys = cleanerDriver.getRecords(table, primaryKeys, "TENANT_ID = 1", 10);
+      assertThat(keys).hasSize(3);
+      int removed = cleanerDriver.deleteRecords(table, primaryKeys, null, keys, true);
+
+      assertThat(removed).isEqualTo(3);
+      assertThat(DataCreator.executeCount(table, null)).isEqualTo(3);
+      assertThat(DataCreator.executeCount(table, "TENANT_ID = 2")).isEqualTo(3);
+    } catch (DataException e) {
+      Assertions.fail();
+    }
+  }
+
+  @Test
+  @DisplayName("Delete records by string primary key")
+  void testDeleteRecordsByStringPrimaryKey() {
+    try {
+      String table = TestConfig.TABLE_NAME + "_string_key";
+      DataCreator.createStringKeyData(table, "a'1", "b2");
+      List<String> primaryKeys = cleanerDriver.getPrimaryKeys(table);
+      assertThat(primaryKeys).containsExactly("ID");
+
+      List<KeyRow> keys = Collections.singletonList(new KeyRow(primaryKeys, Collections.singletonList("a'1")));
+      int removed = cleanerDriver.deleteRecords(table, primaryKeys, null, keys, true);
+
+      assertThat(removed).isEqualTo(1);
+      assertThat(DataCreator.executeCount(table, null)).isEqualTo(1);
+      assertThat(DataCreator.executeCount(table, "ID = 'b2'")).isEqualTo(1);
+    } catch (DataException e) {
+      Assertions.fail();
+    }
+  }
+
+  @Test
   @DisplayName("Delete records by primary key , exception")
   void testDeleteRecordsByPrimaryKeyException() {
-    assertThatThrownBy(() -> cleanerDriver.deleteRecords(TestConfig.TABLE_NAME, "id", "a LIKE ''a%'", new ArrayList<>(), true)).isInstanceOf(DataException.class);
+    assertThatThrownBy(() -> cleanerDriver.deleteRecords(TestConfig.TABLE_NAME, TestConfig.primaryKeys(), "a LIKE ''a%'",
+        TestConfig.keyRows(1), true)).isInstanceOf(DataException.class);
+  }
+
+  @Test
+  @DisplayName("Delete records rejects oversized bind batches")
+  void testDeleteRecordsRejectsOversizedBindBatch() {
+    List<KeyRow> keys = new ArrayList<>();
+    for (int i = 0; i <= 10_000; i++) {
+      keys.add(new KeyRow(TestConfig.primaryKeys(), Collections.singletonList(i)));
+    }
+
+    assertThatThrownBy(() -> cleanerDriver.deleteRecords(TestConfig.TABLE_NAME, TestConfig.primaryKeys(), null,
+        keys, true)).isInstanceOf(DataException.class)
+        .hasMessageContaining("maximum is 10000");
   }
 
   @Test
   @DisplayName("Delete records by primary key , exception on commit")
   void testDeleteRecordsByPrimaryKeyExceptionOnCommit() throws SQLException {
     Connection connection = Mockito.mock(Connection.class);
+    cleanerDriver.close();
     cleanerDriver.setConn(connection);
     Mockito.doNothing().when(connection).setAutoCommit(Mockito.anyBoolean());
     Mockito.doThrow(SQLException.class).when(connection).setAutoCommit(Mockito.anyBoolean());
 
     DataCreator.createData(TestConfig.TABLE_NAME + "b", 10);
-    List<String> keys = new ArrayList<>();
+    List<KeyRow> keys = new ArrayList<>();
     for (int i = 1; i <= 10; i++) {
-      keys.add(String.valueOf(i));
+      keys.add(new KeyRow(TestConfig.primaryKeys(), Collections.singletonList(i)));
     }
 
-    assertThatThrownBy(() -> cleanerDriver.deleteRecords(TestConfig.TABLE_NAME + "b", "id", null, keys, false)).isInstanceOf(DataException.class);
+    assertThatThrownBy(() -> cleanerDriver.deleteRecords(TestConfig.TABLE_NAME + "b", TestConfig.primaryKeys(), null, keys, false)).isInstanceOf(DataException.class);
 
     int amount = DataCreator.executeCount(TestConfig.TABLE_NAME + "b", null);
     assertThat(amount).isEqualTo(10);
@@ -248,9 +321,11 @@ class CleanerDriverImplTest {
   void testGetTableSchema() {
     try {
       DataCreator.createData(TestConfig.TABLE_NAME, 1);
-      Map<String, String> tableInfo = cleanerDriver.getTable(TestConfig.TABLE_NAME);
-      assertThat(tableInfo).hasSize(4);
-      assertThat(tableInfo).containsKeys("name", "schema", "catalog", "type");
+      Optional<TableMetadata> tableInfo = cleanerDriver.getTable(TestConfig.TABLE_NAME);
+      assertThat(tableInfo).isPresent();
+      assertThat(tableInfo.get().getName()).isEqualToIgnoringCase(TestConfig.TABLE_NAME);
+      assertThat(tableInfo.get().qualifiedName()).containsIgnoringCase(TestConfig.TABLE_NAME);
+      assertThat(tableInfo.get().getType()).isNotBlank();
     } catch (DataException e) {
       Assertions.fail();
     }
@@ -260,6 +335,7 @@ class CleanerDriverImplTest {
   @DisplayName("Get table meta data , exception")
   void testGetTableSchemaMockException() throws SQLException {
     Connection connection = Mockito.mock(Connection.class);
+    cleanerDriver.close();
     cleanerDriver.setConn(connection);
     Mockito.when(connection.getMetaData()).thenThrow(SQLException.class);
     assertThatThrownBy(() -> cleanerDriver.getTable(TestConfig.TABLE_NAME)).isInstanceOf(DataException.class);
@@ -296,4 +372,3 @@ class CleanerDriverImplTest {
     assertThatThrownBy(() -> cleanerDriver.countRows(TestConfig.TABLE_NAME, "a LIKE ''a%'")).isInstanceOf(DataException.class);
   }
 }
-

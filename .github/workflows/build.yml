@@ -1,47 +1,91 @@
-name: Build and Test
+name: CI
 
 on:
   push:
-    branches: [ "master" ]
+    branches:
+      - main
+      - master
   pull_request:
-    branches: [ "master" ]
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build:
+  gradle:
+    name: Gradle / Java ${{ matrix.java }}
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         java: [ '11', '17', '21' ]
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout
+      uses: actions/checkout@v7
 
     - name: Set up JDK ${{ matrix.java }}
-      uses: actions/setup-java@v4
+      uses: actions/setup-java@v5
       with:
-        java-version: ${{ matrix.java }}
         distribution: 'temurin'
-
-    - name: Cache Gradle packages
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.gradle/caches
-          ~/.gradle/wrapper
-        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-        restore-keys: |
-          ${{ runner.os }}-gradle-
+        java-version: ${{ matrix.java }}
+        cache: 'gradle'
 
     - name: Build with Gradle
-      run: ./gradlew build
+      run: ./gradlew --no-daemon check
 
-    - name: Cache Maven packages
-      uses: actions/cache@v4
+    - name: Upload Gradle reports
+      if: failure()
+      uses: actions/upload-artifact@v7
       with:
-        path: ~/.m2/repository
-        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-        restore-keys: |
-          ${{ runner.os }}-maven-
+        name: gradle-reports-java-${{ matrix.java }}
+        path: |
+          build/reports/
+          build/test-results/
+        if-no-files-found: ignore
+        retention-days: 7
 
-    - name: Build with Maven
-      run: mvn verify assembly:single
+  maven:
+    name: Maven / Java 11
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+
+    - name: Set up JDK 11
+      uses: actions/setup-java@v5
+      with:
+        distribution: 'temurin'
+        java-version: '11'
+        cache: 'maven'
+
+    - name: Verify with Maven
+      run: mvn -B -ntp verify
+
+    - name: Validate Maven release archive
+      run: |
+        version="$(mvn -B -q -DforceStdout help:evaluate -Dexpression=project.version)"
+        archive="target/htcleaner-${version}.tgz"
+        jar="htcleaner-${version}-jar-with-dependencies.jar"
+
+        test -f "${archive}"
+        test "$(tar -tzf "${archive}")" = "${jar}"
+
+    - name: Upload Maven reports
+      if: failure()
+      uses: actions/upload-artifact@v7
+      with:
+        name: maven-reports-java-11
+        path: |
+          target/site/
+          target/spotbugsXml.xml
+          target/surefire-reports/
+        if-no-files-found: ignore
+        retention-days: 7

@@ -1,0 +1,17 @@
+<assembly xmlns="http://maven.apache.org/ASSEMBLY/2.2.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/ASSEMBLY/2.2.0 https://maven.apache.org/xsd/assembly-2.2.0.xsd">
+    <id>release</id>
+    <formats>
+        <format>tgz</format>
+    </formats>
+    <includeBaseDirectory>false</includeBaseDirectory>
+    <files>
+        <file>
+            <source>${project.build.directory}/${project.build.finalName}-jar-with-dependencies.jar</source>
+            <outputDirectory>/</outputDirectory>
+            <destName>${project.build.finalName}-jar-with-dependencies.jar</destName>
+            <fileMode>0644</fileMode>
+        </file>
+    </files>
+</assembly>

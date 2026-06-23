@@ -1,150 +1,203 @@
 # htcleaner
 
-*htcleaner* is a tool designed to remove data from large tables in the database.
-Production systems are often sensitive and running `TRUNCATE` or large `DELETE` commands in such systems may lead to replication delays, overload and so on.
+`htcleaner` purges rows from large database tables in small batches.
+It is intended for production systems where a single large `DELETE` or `TRUNCATE`
+could cause replication lag, lock pressure, or general overload.
 
-It is inspired by pt-archiver, a similar tool that is part of [Percona toolkit](http://www.percona.com/).  
+The tool is inspired by `pt-archiver`, which is part of
+[Percona Toolkit](https://www.percona.com/software/database-tools/percona-toolkit).
+Direct runtime dependencies are intentionally limited to [picocli](https://picocli.info/),
+JDBC drivers, and small supporting annotations.
 
-*htcleaner* is using minimum amount of dependencies and only relying on [picocli](https://picocli.info/) and JDBC drivers.
+Like Percona Toolkit tools, `htcleaner` is explicit about destructive work:
+`--where` is required. To purge every row in the table, pass `--where=1=1`.
 
-# Command line options
+Processing is live-set based: each batch selects the next matching primary keys at
+execution time. Rows inserted or updated to match `--where` while a run is active
+can be processed by the same run. Progress reporting runs independently of batch
+processing when progress output is enabled.
 
-## Required parameters
+Unqualified table names are resolved in the current namespace reported by the
+JDBC connection: current database/catalog for MySQL, and current schema for
+PostgreSQL and Oracle. Use `database.table` for MySQL, or `schema.table` for
+PostgreSQL and Oracle, when the target is not in the current namespace.
 
-Database host name, user name, password, database/schema and table name must be specified as required parameters
+## Command Line Options
 
-**--host** or -**h** specifies a database host name
+### Required Options
 
-~~~
---host=value
-~~~
+- `--host`, `-h`: database host name.
+- `--user`, `-u`: database user name.
+- `--port`, `-P`: database port number. Must be between `1` and `65535`.
+- `--database`, `-d`: database name for MySQL and PostgreSQL, or Oracle service
+  name. PostgreSQL and Oracle schemas are selected through `--table`.
+- `--table`, `-t`: table name. May be qualified as `database.table` for MySQL
+  or `schema.table` for PostgreSQL and Oracle.
+- `--where`, `-w`: SQL predicate for rows that should be purged. Do not include
+  the `WHERE` keyword. Use `--where=1=1` only when you intentionally want to
+  purge every row in the table. The predicate must not include statement
+  separators, SQL comments, control characters, or statement-level SQL keywords
+  such as `SELECT`, `UPDATE`, `DELETE`, `UNION`, `DROP`, or `TRUNCATE`.
 
-**--user** or **-u** specifies a database user name
+If the database user requires a password, supply it with `--password`/`-p` or use
+`--ask-pass` to enter it interactively.
 
-~~~
---user=value
-~~~
+### Optional Options
 
-**--password** or **-p** specifies a password associated with the user name
+- `--password`, `-p`: database password. The value is masked in argument logging,
+  but can still be captured by shell history or process-list tooling. Prefer
+  `--ask-pass` for interactive use.
+- `--ask-pass`: prompt for a database password before connecting. An explicit
+  `--password` value takes precedence.
+- `--limit`, `-l`: batch size for each fetch and delete cycle. Default: `1000`.
+  Must be positive. For Oracle single-column primary-key deletes, the effective
+  maximum is `1000` because Oracle limits `IN` lists to 1000 expressions.
+- `--sleep`, `-s`: delay between batches in milliseconds. Default: `1000`. Must be
+  positive.
+- `--count-rows`: count matching rows before execution so percentage progress can
+  be reported. Default: `true`. Use `--count-rows=false` to skip the count query.
+- `--dry-run`: preview the first matching batch without deleting rows. Default:
+  `false`.
+- `--quiet`, `-q`: disable argument and progress output. Default: `false`.
+- `--progress-delay`: progress reporting interval in milliseconds. Default:
+  `10000`. Must be positive. Progress is disabled when `--quiet=true`. Percentage
+  progress also requires `--count-rows=true`.
+- `--driver`: JDBC dialect to use. Default: `mysql`. Release archives bundle
+  `mysql`, `postgres`, and `oracle`. The `h2` dialect exists for tests and local
+  development, but the H2 JDBC driver is not bundled in the release jar.
+- `--primary-key`: override the detected primary key for single-column primary-key
+  tables. By default, `htcleaner` detects primary keys from table metadata.
+  Composite primary keys are detected and used automatically, and cannot be
+  overridden by this option.
+- `--help`: show usage and available options, then exit.
+- `--version`: show version information from the jar manifest, then exit.
 
-~~~
---password=value
-~~~
+`htcleaner` does not check whether `--where` can use an index. Verify execution
+plans before running against large production tables. For destructive runs,
+prefer qualified table names when the database user can access multiple
+schemas or catalogs with the same table name.
 
-**--port** or **-P** specifies a database port name
+## Examples
 
-~~~
---port=value
-~~~
+Purge all rows with required options and default batch settings:
 
-**--database** or **-d** specifies a database/schema name
+```bash
+java -jar htcleaner-1.1.0-jar-with-dependencies.jar \
+  --host=localhost \
+  --user=username \
+  --ask-pass \
+  --port=3306 \
+  --database=my_schema \
+  --table=my_table \
+  --where=1=1
+```
 
-~~~
---database=value
-~~~
+Run with a custom batch size, sleep interval, and predicate:
 
-**--table** or **-t** specifies a table name
+```bash
+java -jar htcleaner-1.1.0-jar-with-dependencies.jar \
+  --host=localhost \
+  --user=username \
+  --ask-pass \
+  --port=3306 \
+  --database=my_schema \
+  --table=my_table \
+  --limit=1000 \
+  --sleep=10000 \
+  --where="user_id > 100"
+```
 
-~~~
---table=value
-~~~
+Use an explicit password only when non-interactive execution requires it:
 
-## Optional parameters
+```bash
+java -jar htcleaner-1.1.0-jar-with-dependencies.jar \
+  --host=localhost \
+  --user=username \
+  --password=pass \
+  --port=3306 \
+  --database=my_schema \
+  --table=my_table \
+  --where=1=1
+```
 
-**--limit** or **-l** specifies chunk size for each transaction. Default: *1000*.
+Preview the first matching batch without deleting rows:
 
-~~~
---limit=1000
-~~~
+```bash
+java -jar htcleaner-1.1.0-jar-with-dependencies.jar \
+  --host=localhost \
+  --user=username \
+  --ask-pass \
+  --port=3306 \
+  --database=my_schema \
+  --table=my_table \
+  --where=1=1 \
+  --dry-run
+```
 
-**--sleep** or **-s** specifies the delay to wait before continuing with the next chunk. Default: *1000* ms.
+Show usage and available options:
 
-~~~
---sleep=1000
-~~~
+```bash
+java -jar htcleaner-1.1.0-jar-with-dependencies.jar --help
+```
 
-**--count-rows** specifies whether to count all the rows before the execution or not. Default: *1*.
+Show version information from the jar manifest:
 
-~~~
---count-rows=1
-~~~
+```bash
+java -jar htcleaner-1.1.0-jar-with-dependencies.jar --version
+```
 
-**--dry-run** specifies whether execution should be completed, but the data should not be committed. Default: *0*.
+## Requirements
 
-~~~
---dry-run=value
-~~~
+`htcleaner` requires Java 11 or newer.
 
-**--quiet** or **-q** specifies whether to disable unnecessary output / verbose mode Default: *0*
+## Supported JDBC Drivers
 
-~~~
---quiet=value
-~~~
+Version `1.1.0` release archives bundle these driver values:
 
-**--progress-delay** specifies how to often to display execution progress. Note that when `--quiet` is 1, progress is not displayed.
-Progress related information is also limited when `--count-rows` is 0. Default: *10000* ms
+| Driver value | Database | Table scope |
+| --- | --- | --- |
+| `mysql` | MySQL | Regular MySQL tables, including partitioned tables |
+| `postgres` | PostgreSQL | Regular tables and partitioned parent tables |
+| `oracle` | Oracle Database | Regular tables |
 
-~~~
---progress-delay=10000
-~~~
+The code also includes an `h2` dialect for tests and local development. The H2
+JDBC driver is not bundled in the release jar.
 
-**--driver** Specifies a JDBC driver used for the execution. Default: *mysql*
+## Testing Coverage
 
-~~~
---driver value
-~~~
+The automated test suite uses unit tests, mocked JDBC metadata, and H2-backed
+integration coverage. It does not start database containers. End-to-end coverage
+against MySQL, PostgreSQL, and Oracle requires externally managed database
+instances that match the versions used in your environment.
 
-**--primary-key** specifies the primary key used for execution. By default, *htcleaner* is trying to detect primary key from the schema.
+## Building
 
-~~~
---primary-key value
-~~~
+Run the full Maven verification, including tests, coverage, SpotBugs, and release
+archive creation:
 
-**--where** or **-w** specifies a `WHERE` statement if some of the rows should not be removed.
-However, *htcleaner* does not check for any indexes and it is highly recommended to check whether the statement is hitting the right indexes.
+```bash
+mvn verify
+```
 
-~~~
---where value
-~~~
+Run the Gradle quality gate:
 
-### Examples
+```bash
+./gradlew check
+```
 
-Execution without optional parameters. Defaults will be used instead.
+## Release Archives
 
-~~~
-java -jar htcleaner-mysql-1.0.5-jar-with-dependencies.jar --host=localhost --user=username --password=pass --port=3306 --database=my_schema --table=my_table
-~~~
+GitHub releases publish a compressed archive named `htcleaner-<version>.tgz`.
+The release archive is built by Maven during `mvn verify`.
+The archive contains the runnable jar at the archive root:
 
-Execution with additional parameters and optional `WHERE` statement
+```text
+htcleaner-<version>-jar-with-dependencies.jar
+```
 
-~~~
-java -jar htcleaner-mysql-1.0.5-jar-with-dependencies.jar --host=localhost --user=username --password=pass --port=3306 --database=my_schema --table=my_table --limit=1000 --sleep=10000 --WHERE="AND user_id > 100"
-~~~
+For version `1.1.0`, the release page should contain `htcleaner-1.1.0.tgz`.
+Its contents should be:
 
-Execution without any parameters will display all the parameters, including shorthands
-
-~~~
-java -jar htcleaner-mysql-1.0.5-jar-with-dependencies.jar
-~~~
-
-# Requirements
-
-* Requires JDK 11 (or newer).
-
-# Supported JDBC drivers
-
-As of version 1.1.0, the tool supports MySQL, PostgreSQL, and Oracle CE.
-
-# Building
-
-* Maven
-
-~~~
-mvn verify assembly:single
-~~~
-
-* Gradle
-
-~~~
-./gradlew build
-~~~
+```text
+htcleaner-1.1.0-jar-with-dependencies.jar
+```
