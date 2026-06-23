@@ -1,14 +1,22 @@
 package com.henrya.tools.htcleaner;
 
+import com.henrya.tools.htcleaner.cli.ManifestVersionProvider;
 import com.henrya.tools.htcleaner.constants.DefaultsConstants;
 import com.henrya.tools.htcleaner.constants.ParameterConstants;
 import com.henrya.tools.htcleaner.driver.CleanerDriverImpl;
 import com.henrya.tools.htcleaner.exception.CleanerException;
+import com.henrya.tools.htcleaner.model.CleanerConfig;
 import com.henrya.tools.htcleaner.processor.ProcessorImpl;
-
 import com.henrya.tools.htcleaner.validator.ValidatorImpl;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+
+import java.io.Console;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.Callable;
+import java.util.function.Function;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -19,16 +27,19 @@ import picocli.CommandLine.Option;
 import picocli.CommandLine.Spec;
 
 /**
- * Cleaner instance
+ * Picocli command that removes rows from a table in bounded batches.
  */
-@Command(name = "htcleaner", description = "Clean large tables")
-public class Cleaner implements Runnable {
+@Command(name = "htcleaner", description = "Nibble rows from large tables in small batches",
+    versionProvider = ManifestVersionProvider.class)
+public class Cleaner implements Callable<Integer> {
 
   /**
-   * picocli command spec
+   * Injected picocli command spec.
    */
   @Spec
   CommandSpec spec;
+
+  private Function<String, char[]> passwordReader = this::readPasswordFromConsole;
 
   /**
    * Host name
@@ -45,11 +56,18 @@ public class Cleaner implements Runnable {
   String user;
 
   /**
-   * User password
+   * Database password.
    */
   @Option(names = {ParameterConstants.PARAMETER_PASSWORD_SHORT,
-      ParameterConstants.PARAMETER_PASSWORD_LONG}, required = true, description = "Database password")
+      ParameterConstants.PARAMETER_PASSWORD_LONG}, description = "Database password")
   String password;
+
+  /**
+   * Prompt for password.
+   */
+  @Option(names = {
+      ParameterConstants.PARAMETER_ASK_PASS_LONG}, description = "Prompt for database password")
+  boolean askPass;
 
   /**
    * Database port
@@ -73,75 +91,98 @@ public class Cleaner implements Runnable {
   String table;
 
   /**
-   * WHERE statement for the query
+   * SQL predicate used to filter rows.
    */
   @Option(names = {ParameterConstants.PARAMETER_WHERE_SHORT,
-      ParameterConstants.PARAMETER_WHERE_LONG}, description = "Where clause when fetching the rows")
+      ParameterConstants.PARAMETER_WHERE_LONG}, required = true,
+      description = "SQL predicate without the WHERE keyword; use 1=1 for all rows")
   String where;
 
   /**
    * Chunk size
    */
   @Option(names = {ParameterConstants.PARAMETER_LIMIT_SHORT,
-      ParameterConstants.PARAMETER_LIMIT_LONG}, defaultValue = DefaultsConstants.DEFAULT_FETCH_LIMIT, description = "The limit set in each fetch")
+      ParameterConstants.PARAMETER_LIMIT_LONG}, defaultValue = DefaultsConstants.DEFAULT_FETCH_LIMIT,
+      description = "Rows to fetch and purge per batch")
   Integer limit;
 
   /**
    * Interval of the execution
    */
   @Option(names = {ParameterConstants.PARAMETER_SLEEP_SHORT,
-      ParameterConstants.PARAMETER_SLEEP_LONG}, defaultValue = DefaultsConstants.DEFAULT_FETCH_SLEEP_MS, description = "Sleep time between fetches")
+      ParameterConstants.PARAMETER_SLEEP_LONG}, defaultValue = DefaultsConstants.DEFAULT_FETCH_SLEEP_MS,
+      description = "Sleep time between fetches")
   Integer sleep;
 
   /**
    * Dry run mode
    */
   @Option(names = {
-      ParameterConstants.PARAMETER_DRY_RUN_LONG}, defaultValue = DefaultsConstants.DEFAULT_DRY_RUN, description = "Performs fetch, but does not execute purge")
+      ParameterConstants.PARAMETER_DRY_RUN_LONG}, defaultValue = DefaultsConstants.DEFAULT_DRY_RUN,
+      description = "Fetch one batch, but do not purge")
   boolean dryRun;
 
   /**
-   * Count amount of the rows to be processed or not
+   * Whether to count rows before execution.
    */
   @Option(names = {
-      ParameterConstants.PARAMETER_COUNT_ROWS_LONG}, defaultValue = DefaultsConstants.DEFAULT_COUNT_ROWS, description = "Executes count query to measure progress of the execution")
+      ParameterConstants.PARAMETER_COUNT_ROWS_LONG}, defaultValue = DefaultsConstants.DEFAULT_COUNT_ROWS,
+      description = "Count matching rows before execution")
   boolean countRows;
 
   /**
    * Display arguments and current progress or not
    */
   @Option(names = {ParameterConstants.PARAMETER_QUIET_SHORT,
-      ParameterConstants.PARAMETER_QUIET_LONG}, defaultValue = DefaultsConstants.DEFAULT_QUIET_MODE, description = "Do not print any statistcs")
+      ParameterConstants.PARAMETER_QUIET_LONG}, defaultValue = DefaultsConstants.DEFAULT_QUIET_MODE,
+      description = "Do not print arguments or progress")
   boolean quiet;
 
   /**
-   * The interval when progress is being displayed
+   * Progress display interval in milliseconds.
    */
   @Option(names = {
-      ParameterConstants.PARAMETER_PROGRESS_DELAY_LONG}, defaultValue = DefaultsConstants.DEFAULT_PROGRESS_INTERVAL, description = "Interval when progress is updated")
+      ParameterConstants.PARAMETER_PROGRESS_DELAY_LONG}, defaultValue = DefaultsConstants.DEFAULT_PROGRESS_INTERVAL,
+      description = "Progress update interval in milliseconds")
   Integer progressDelay;
 
   /**
-   * Primary key for he query If given, will override they key detected automatically
+   * Primary key override. By default, the cleaner detects the table primary key from metadata.
    */
   @Option(names = {
-      ParameterConstants.PARAMETER_PRIMARY_KEY_LONG}, defaultValue = DefaultsConstants.PRIMARY_KEY, description = "Primary key to be used")
+      ParameterConstants.PARAMETER_PRIMARY_KEY_LONG}, defaultValue = DefaultsConstants.PRIMARY_KEY,
+      description = "Single-column primary key override")
   String primaryKey;
 
   /**
    * Driver name
    */
   @Option(names = {
-      ParameterConstants.PARAMETER_DRIVER_LONG}, defaultValue = DefaultsConstants.DEFAULT_DRIVER, description = "JDBC Database driver")
+      ParameterConstants.PARAMETER_DRIVER_LONG}, defaultValue = DefaultsConstants.DEFAULT_DRIVER,
+      description = "JDBC database driver")
   String driver;
 
   /**
-   * Command line runner main method
-   *
-   * @param args arguments
+   * Display command help.
    */
-  public static void main(String... args) {
-    new CommandLine(new Cleaner()).execute(args);
+  @Option(names = {ParameterConstants.PARAMETER_HELP_LONG}, usageHelp = true, description = "Show this help and exit")
+  boolean usageHelpRequested;
+
+  /**
+   * Display command version.
+   */
+  @Option(names = {
+      ParameterConstants.PARAMETER_VERSION_LONG}, versionHelp = true, description = "Show version and exit")
+  boolean versionHelpRequested;
+
+  /**
+   * Execute command line and return exit code.
+   *
+   * @param args command line arguments
+   * @return command exit code
+   */
+  public static int execute(String... args) {
+    return new CommandLine(new Cleaner()).execute(args);
   }
 
   /**
@@ -149,6 +190,8 @@ public class Cleaner implements Runnable {
    *
    * @return CommandSpec spec
    */
+  @SuppressFBWarnings(value = "EI_EXPOSE_REP",
+      justification = "Picocli owns and mutates CommandSpec; Cleaner only exposes it for validation.")
   public CommandSpec getSpec() {
     return spec;
   }
@@ -158,6 +201,8 @@ public class Cleaner implements Runnable {
    *
    * @param spec CommandSpec
    */
+  @SuppressFBWarnings(value = "EI_EXPOSE_REP2",
+      justification = "Picocli injects CommandSpec; copying is not supported by the framework.")
   public void setSpec(CommandSpec spec) {
     this.spec = spec;
   }
@@ -199,12 +244,21 @@ public class Cleaner implements Runnable {
   }
 
   /**
-   * Get password
+   * Returns the configured password.
    *
    * @return String password
    */
   public String getPassword() {
     return password;
+  }
+
+  /**
+   * Overrides password prompt handling. Intended for tests.
+   *
+   * @param passwordReader password prompt function
+   */
+  void setPasswordReader(Function<String, char[]> passwordReader) {
+    this.passwordReader = Objects.requireNonNull(passwordReader, "passwordReader");
   }
 
   /**
@@ -214,6 +268,24 @@ public class Cleaner implements Runnable {
    */
   public void setPassword(String password) {
     this.password = password;
+  }
+
+  /**
+   * Returns whether password prompting is enabled.
+   *
+   * @return boolean ask password
+   */
+  public boolean isAskPass() {
+    return askPass;
+  }
+
+  /**
+   * Set password prompt mode.
+   *
+   * @param askPass prompt for password
+   */
+  public void setAskPass(boolean askPass) {
+    this.askPass = askPass;
   }
 
   /**
@@ -330,6 +402,15 @@ public class Cleaner implements Runnable {
    * @return boolean Dry run mode
    */
   public boolean isDryRun() {
+    return dryRun;
+  }
+
+  /**
+   * Returns whether SQL changes should be committed.
+   *
+   * @return boolean commit changes
+   */
+  public boolean shouldCommit() {
     return !dryRun;
   }
 
@@ -399,7 +480,7 @@ public class Cleaner implements Runnable {
   /**
    * Get primary key
    *
-   * @return String Primary keu
+   * @return String Primary key
    */
   public String getPrimaryKey() {
     return primaryKey;
@@ -407,6 +488,7 @@ public class Cleaner implements Runnable {
 
   /**
    * Set primary key
+   *
    * @param primaryKey primary key
    */
   public void setPrimaryKey(String primaryKey) {
@@ -423,7 +505,7 @@ public class Cleaner implements Runnable {
   }
 
   /**
-   * Set Driver
+   * Set driver
    *
    * @param driver driver name
    */
@@ -431,23 +513,58 @@ public class Cleaner implements Runnable {
     this.driver = driver;
   }
 
-  /**
-   * Start the runnable
-   */
-  public void run() {
+  private void resolvePassword() {
+    if (password != null || !askPass) {
+      return;
+    }
+
+    char[] promptedPassword = passwordReader.apply("Enter password: ");
+    if (promptedPassword == null) {
+      throw new CommandLine.ParameterException(spec.commandLine(),
+          "Cannot read password from console for --ask-pass");
+    }
+
     try {
+      password = new String(promptedPassword);
+    } finally {
+      Arrays.fill(promptedPassword, '\0');
+    }
+  }
+
+  private char[] readPasswordFromConsole(String prompt) {
+    Console console = System.console();
+    if (console == null) {
+      return null;
+    }
+    return console.readPassword("%s", prompt);
+  }
+
+  /**
+   * Executes the cleaner command and returns a picocli exit code.
+   *
+   * @return command exit code
+   */
+  public Integer call() {
+    try {
+      resolvePassword();
       List<String> arguments = ValidatorImpl.validate(this);
-      // print arguments
       if (!arguments.isEmpty()) {
         Logger.getGlobal().info("Arguments: ");
         arguments.forEach(argument -> Logger.getGlobal().info(argument));
       }
-      ProcessorImpl processor = new ProcessorImpl();
-      processor.process(this, new CleanerDriverImpl(getDriver()));
+      CleanerConfig config = CleanerConfig.from(this);
+      try (CleanerDriverImpl cleanerDriver = new CleanerDriverImpl(getDriver())) {
+        ProcessorImpl processor = new ProcessorImpl();
+        processor.process(config, cleanerDriver);
+      }
+      return CommandLine.ExitCode.OK;
+    } catch (CommandLine.ParameterException e) {
+      spec.commandLine().getErr().println(e.getMessage());
+      spec.commandLine().usage(spec.commandLine().getErr());
+      return CommandLine.ExitCode.USAGE;
     } catch (CleanerException e) {
-      Logger.getGlobal().log(Level.SEVERE, () ->
-          String.format("Execution failed with the error: %s", e.getMessage())
-      );
+      Logger.getGlobal().log(Level.SEVERE, String.format("Execution failed with the error: %s", e.getMessage()), e);
+      return CommandLine.ExitCode.SOFTWARE;
     }
   }
 }

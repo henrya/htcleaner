@@ -2,7 +2,7 @@ package com.henrya.tools.htcleaner;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.mockito.*;
+import org.mockito.Mockito;
 import picocli.CommandLine;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -28,6 +28,7 @@ class CleanerTest {
     cleaner.setPrimaryKey("ID");
     cleaner.setWhere("WHERE");
     cleaner.setProgressDelay(100);
+    cleaner.setAskPass(true);
     assertThat(cleaner.isNotQuiet()).isFalse();
     assertThat(cleaner.isCountRows()).isTrue();
     assertThat(cleaner.getDatabase()).isEqualTo("h2");
@@ -36,60 +37,165 @@ class CleanerTest {
     assertThat(cleaner.getLimit()).isEqualTo(1000);
     assertThat(cleaner.getPassword()).isEqualTo("abc");
     assertThat(cleaner.getPort()).isEqualTo(3306);
-    assertThat(cleaner.isDryRun()).isTrue();
+    assertThat(cleaner.isDryRun()).isFalse();
+    assertThat(cleaner.shouldCommit()).isTrue();
     assertThat(cleaner.getPrimaryKey()).isEqualTo("ID");
     assertThat(cleaner.getWhere()).isEqualTo("WHERE");
     assertThat(cleaner.getProgressDelay()).isEqualTo(100);
+    assertThat(cleaner.isAskPass()).isTrue();
   }
 
   @Test
   @DisplayName("Test required parameters missing exception")
-  void requiredParameterMissingTest() throws Exception{
+  void requiredParameterMissingTest() throws Exception {
     String systemError = tapSystemErr(() -> {
       String output = tapSystemOutNormalized(() -> new CommandLine(new Cleaner()).execute());
       assertThat(output).isEmpty();
     });
 
-    assertThat(systemError).isEqualTo("Missing required options: '--host=<host>', '--user=<user>', '--password=<password>', '--port=<port>', '--database=<database>', '--table=<table>'\n" +
-            "Usage: htcleaner [-q] [--count-rows] [--dry-run] -d=<database>\n" +
-            "                 [--driver=<driver>] -h=<host> [-l=<limit>] -p=<password>\n" +
-            "                 -P=<port> [--primary-key=<primaryKey>]\n" +
-            "                 [--progress-delay=<progressDelay>] [-s=<sleep>] -t=<table>\n" +
-            "                 --u=<user> [-w=<where>]\n" +
-            "Clean large tables\n" +
-            "      --count-rows         Executes count query to measure progress of the\n" +
-            "                             execution\n" +
-            "  -d, --database=<database>\n" +
-            "                           Database information\n" +
-            "      --driver=<driver>    JDBC Database driver\n" +
-            "      --dry-run            Performs fetch, but does not execute purge\n" +
-            "  -h, --host=<host>        Database host name\n" +
-            "  -l, --limit=<limit>      The limit set in each fetch\n" +
-            "  -p, --password=<password>\n" +
-            "                           Database password\n" +
-            "  -P, --port=<port>        Port number\n" +
-            "      --primary-key=<primaryKey>\n" +
-            "                           Primary key to be used\n" +
-            "      --progress-delay=<progressDelay>\n" +
-            "                           Interval when progress is updated\n" +
-            "  -q, --quiet              Do not print any statistcs\n" +
-            "  -s, --sleep=<sleep>      Sleep time between fetches\n" +
-            "  -t, --table=<table>      Table information\n" +
-            "      --u, --user=<user>   Database user name\n" +
-            "  -w, --where=<where>      Where clause when fetching the rows\n");
+    assertThat(systemError)
+        .contains("Missing required options")
+        .contains("'--host=<host>'")
+        .contains("'--user=<user>'")
+        .contains("'--port=<port>'")
+        .contains("'--database=<database>'")
+        .contains("'--table=<table>'")
+        .contains("'--where=<where>'")
+        .contains("Usage: htcleaner")
+        .contains("-u")
+        .contains("--user=<user>");
   }
 
   @Test
   @DisplayName("Test required parameters valid")
-  void requiredParameterValidTest() throws Exception{
+  void requiredParameterValidTest() throws Exception {
     String systemError = tapSystemErr(() -> {
       String outText = tapSystemOutNormalized(() -> {
         Cleaner cleaner = Mockito.spy(Cleaner.class);
-        Mockito.doNothing().when(cleaner).run();
-        new CommandLine(cleaner).execute("--user=test", "--password=123", "--host=localhost", "--port=3301", "--database=test", "--table=demo",  "--where=1=1", "--quiet=false");
+        Mockito.doReturn(CommandLine.ExitCode.OK).when(cleaner).call();
+        new CommandLine(cleaner).execute("--user=test", "--password=123", "--host=localhost", "--port=3301",
+            "--database=test", "--table=demo", "--where=1=1", "--quiet=false");
       });
       assertThat(outText).isEmpty();
     });
     assertThat(systemError).isEmpty();
+  }
+
+  @Test
+  @DisplayName("Test validation errors return usage exit code")
+  void validationErrorExitCodeTest() throws Exception {
+    String systemError = tapSystemErr(() -> {
+      int exitCode = new CommandLine(new Cleaner()).execute("--user=test", "--password=123",
+          "--host=localhost", "--port=3301", "--database=test", "--table=demo", "--where=1=1", "--limit=0");
+      assertThat(exitCode).isEqualTo(CommandLine.ExitCode.USAGE);
+    });
+
+    assertThat(systemError)
+        .contains("Invalid value '0' for option '--limit':")
+        .contains("Usage: htcleaner");
+  }
+
+  @Test
+  @DisplayName("Invalid where predicate returns usage exit code")
+  void invalidWhereExitCodeTest() throws Exception {
+    String systemError = tapSystemErr(() -> {
+      int exitCode = new CommandLine(new Cleaner()).execute("--user=test", "--password=123",
+          "--host=localhost", "--port=3301", "--database=test", "--table=demo", "--where=WHERE id = 1");
+      assertThat(exitCode).isEqualTo(CommandLine.ExitCode.USAGE);
+    });
+
+    assertThat(systemError)
+        .contains("WHERE predicate must not include the WHERE keyword")
+        .contains("Usage: htcleaner");
+  }
+
+  @Test
+  @DisplayName("Runtime failures return software exit code")
+  void runtimeFailureExitCodeTest() {
+    int exitCode = new CommandLine(new Cleaner()).execute("--user=test", "--password=123",
+        "--host=localhost", "--port=3301", "--database=test", "--table=demo", "--where=1=1", "--driver=random");
+
+    assertThat(exitCode).isEqualTo(CommandLine.ExitCode.SOFTWARE);
+  }
+
+  @Test
+  @DisplayName("Password can be omitted")
+  void passwordCanBeOmittedTest() {
+    int exitCode = new CommandLine(new Cleaner()).execute("--user=test",
+        "--host=localhost", "--port=3301", "--database=test", "--table=demo", "--where=1=1", "--driver=random");
+
+    assertThat(exitCode).isEqualTo(CommandLine.ExitCode.SOFTWARE);
+  }
+
+  @Test
+  @DisplayName("Ask pass reads password before execution")
+  void askPassReadsPasswordTest() {
+    Cleaner cleaner = new Cleaner();
+    cleaner.setPasswordReader(prompt -> "secret".toCharArray());
+
+    int exitCode = new CommandLine(cleaner).execute("--user=test",
+        "--host=localhost", "--port=3301", "--database=test", "--table=demo", "--where=1=1", "--driver=random",
+        "--ask-pass");
+
+    assertThat(exitCode).isEqualTo(CommandLine.ExitCode.SOFTWARE);
+    assertThat(cleaner.getPassword()).isEqualTo("secret");
+  }
+
+  @Test
+  @DisplayName("Ask pass without console returns usage exit code")
+  void askPassWithoutConsoleExitCodeTest() throws Exception {
+    Cleaner cleaner = new Cleaner();
+    cleaner.setPasswordReader(prompt -> null);
+
+    String systemError = tapSystemErr(() -> {
+      int exitCode = new CommandLine(cleaner).execute("--user=test",
+          "--host=localhost", "--port=3301", "--database=test", "--table=demo", "--where=1=1", "--ask-pass");
+      assertThat(exitCode).isEqualTo(CommandLine.ExitCode.USAGE);
+    });
+
+    assertThat(systemError)
+        .contains("Cannot read password from console for --ask-pass")
+        .contains("Usage: htcleaner");
+  }
+
+  @Test
+  @DisplayName("Explicit password wins over ask pass")
+  void explicitPasswordWinsOverAskPassTest() {
+    Cleaner cleaner = new Cleaner();
+    cleaner.setPasswordReader(prompt -> {
+      throw new AssertionError("Password prompt should not run when --password is supplied");
+    });
+
+    int exitCode = new CommandLine(cleaner).execute("--user=test", "--password=123",
+        "--host=localhost", "--port=3301", "--database=test", "--table=demo", "--where=1=1", "--driver=random",
+        "--ask-pass");
+
+    assertThat(exitCode).isEqualTo(CommandLine.ExitCode.SOFTWARE);
+    assertThat(cleaner.getPassword()).isEqualTo("123");
+  }
+
+  @Test
+  @DisplayName("Help option follows Percona-style long option")
+  void helpOptionTest() throws Exception {
+    String output = tapSystemOutNormalized(() -> {
+      int exitCode = new CommandLine(new Cleaner()).execute("--help");
+      assertThat(exitCode).isEqualTo(CommandLine.ExitCode.OK);
+    });
+
+    assertThat(output)
+        .contains("Usage: htcleaner")
+        .contains("--help")
+        .contains("--where=<where>");
+  }
+
+  @Test
+  @DisplayName("Version option follows Percona-style long option")
+  void versionOptionTest() throws Exception {
+    String output = tapSystemOutNormalized(() -> {
+      int exitCode = new CommandLine(new Cleaner()).execute("--version");
+      assertThat(exitCode).isEqualTo(CommandLine.ExitCode.OK);
+    });
+
+    assertThat(output).contains("htcleaner ");
   }
 }

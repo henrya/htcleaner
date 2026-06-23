@@ -7,6 +7,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import picocli.CommandLine;
 import picocli.CommandLine.ParameterException;
+
+import java.lang.reflect.Constructor;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -22,7 +24,7 @@ class ValidatorImplTest {
     cleaner.setSpec(commandLine.getCommandSpec());
     try {
       List<String> arguments = ValidatorImpl.validate(cleaner);
-      assertThat(arguments).hasSize(15);
+      assertThat(arguments).hasSize(16);
     } catch (ParameterException e){
       Assertions.fail();
     }
@@ -40,6 +42,17 @@ class ValidatorImplTest {
   }
 
   @Test
+  @DisplayName("Test zero limit argument error")
+  void testZeroLimitArgumentError() throws ParameterException {
+      Cleaner cleaner = TestConfig.getCleaner();
+      cleaner.setLimit(0);
+      CommandLine commandLine = new CommandLine(cleaner);
+      cleaner.setSpec(commandLine.getCommandSpec());
+      assertThatThrownBy(() -> ValidatorImpl.validate(cleaner)).isInstanceOf(ParameterException.class)
+          .hasMessageContaining("Invalid value '0' for option '--limit': ");
+  }
+
+  @Test
   @DisplayName("Test port argument error")
   void testPortArgumentError() throws ParameterException {
     Cleaner cleaner = TestConfig.getCleaner();
@@ -48,6 +61,17 @@ class ValidatorImplTest {
     cleaner.setSpec(commandLine.getCommandSpec());
     assertThatThrownBy(() -> ValidatorImpl.validate(cleaner)).isInstanceOf(ParameterException.class)
         .hasMessageContaining("Invalid value '-1' for option '--port': ");
+  }
+
+  @Test
+  @DisplayName("Test port upper bound argument error")
+  void testPortUpperBoundArgumentError() throws ParameterException {
+    Cleaner cleaner = TestConfig.getCleaner();
+    cleaner.setPort(65536);
+    CommandLine commandLine = new CommandLine(cleaner);
+    cleaner.setSpec(commandLine.getCommandSpec());
+    assertThatThrownBy(() -> ValidatorImpl.validate(cleaner)).isInstanceOf(ParameterException.class)
+        .hasMessageContaining("Invalid value '65536' for option '--port': ");
   }
 
   @Test
@@ -73,6 +97,29 @@ class ValidatorImplTest {
   }
 
   @Test
+  @DisplayName("Test omitted password is valid")
+  void testOmittedPasswordIsValid() {
+    Cleaner cleaner = TestConfig.getCleaner();
+    cleaner.setPassword(null);
+    CommandLine commandLine = new CommandLine(cleaner);
+    cleaner.setSpec(commandLine.getCommandSpec());
+
+    assertThat(ValidatorImpl.validate(cleaner)).hasSize(16);
+    assertThat(cleaner.getPassword()).isNull();
+  }
+
+  @Test
+  @DisplayName("Test where predicate argument error")
+  void testWherePredicateArgumentError() {
+    Cleaner cleaner = TestConfig.getCleaner();
+    cleaner.setWhere("WHERE id > 1");
+    CommandLine commandLine = new CommandLine(cleaner);
+    cleaner.setSpec(commandLine.getCommandSpec());
+    assertThatThrownBy(() -> ValidatorImpl.validate(cleaner)).isInstanceOf(ParameterException.class)
+        .hasMessageContaining("WHERE predicate must not include the WHERE keyword");
+  }
+
+  @Test
   @DisplayName("Test quiet mode")
   void testQuietMode() {
     Cleaner cleaner = TestConfig.getCleaner();
@@ -89,8 +136,12 @@ class ValidatorImplTest {
 
   @Test
   @DisplayName("Test initialization error")
-  void testInitializationError() throws ParameterException {
-    assertThatThrownBy(ValidatorImpl::new).isInstanceOf(UnsupportedOperationException.class)
-        .hasMessageContaining("This class cannot be initialized directly");
+  void testInitializationError() throws Exception {
+    Constructor<ValidatorImpl> constructor = ValidatorImpl.class.getDeclaredConstructor();
+    constructor.setAccessible(true);
+
+    assertThatThrownBy(constructor::newInstance)
+        .hasRootCauseInstanceOf(UnsupportedOperationException.class)
+        .hasRootCauseMessage("This class cannot be initialized directly");
   }
 }

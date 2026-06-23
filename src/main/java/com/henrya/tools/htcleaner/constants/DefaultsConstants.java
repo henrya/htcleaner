@@ -1,50 +1,50 @@
 package com.henrya.tools.htcleaner.constants;
 
 /**
- * Default constants
+ * Default CLI option values.
  */
-public class DefaultsConstants {
-  DefaultsConstants(){
-    throw new UnsupportedOperationException("This class cannot be initialized directly");
-  }
-
+public final class DefaultsConstants {
   /**
-   * Default sleep
+   * Default sleep between batches in milliseconds.
    */
   public static final String DEFAULT_FETCH_SLEEP_MS = "1000";
 
   /**
-   * Default limit for each fetch
+   * Default fetch size for each batch.
    */
   public static final String DEFAULT_FETCH_LIMIT = "1000";
 
   /**
-   * Is the dry run option disabled by default or not
+   * Dry run is disabled by default.
    */
   public static final String DEFAULT_DRY_RUN = "false";
 
   /**
-   * Default status for verbose mode
+   * Verbose output is enabled by default.
    */
   public static final String DEFAULT_QUIET_MODE = "false";
 
   /**
-   * Default interval when displaying the progress
+   * Default progress display interval in milliseconds.
    */
   public static final String DEFAULT_PROGRESS_INTERVAL = "10000";
 
   /**
-   * Count rows by default or not
+   * Row counting is enabled by default.
    */
   public static final String DEFAULT_COUNT_ROWS = "true";
 
   /**
-   * Default driver
+   * Default JDBC driver.
    */
   public static final String DEFAULT_DRIVER = "mysql";
 
   /**
-   * Default primary key
+   * Empty primary-key override means "detect from metadata".
    */
   public static final String PRIMARY_KEY = "";
+
+  private DefaultsConstants() {
+    throw new UnsupportedOperationException("This class cannot be initialized directly");
+  }
 }
